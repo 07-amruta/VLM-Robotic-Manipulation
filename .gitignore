@@ -49,3 +49,12 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# ROS 2 workspace build files
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+
+# ROS 2 / colcon generated files
+.colcon/
+COLCON_IGNORE
