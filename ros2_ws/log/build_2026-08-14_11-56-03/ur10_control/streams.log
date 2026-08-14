@@ -1,0 +1,15 @@
+[0.543s] Invoking command in '/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control': PYTHONPATH=/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/build --no-deps symlink_data
+[0.818s] running develop
+[0.946s] running egg_info
+[0.956s] writing ur10_control.egg-info/PKG-INFO
+[0.956s] writing dependency_links to ur10_control.egg-info/dependency_links.txt
+[0.957s] writing requirements to ur10_control.egg-info/requires.txt
+[0.957s] writing top-level names to ur10_control.egg-info/top_level.txt
+[0.992s] reading manifest file 'ur10_control.egg-info/SOURCES.txt'
+[0.992s] writing manifest file 'ur10_control.egg-info/SOURCES.txt'
+[1.003s] running build_ext
+[1.003s] Creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/lib/python3.10/site-packages/ur10-control.egg-link (link to .)
+[1.003s] 
+[1.003s] Installed /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control
+[1.003s] running symlink_data
+[1.026s] Invoked command in '/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control' returned '0': PYTHONPATH=/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/build --no-deps symlink_data

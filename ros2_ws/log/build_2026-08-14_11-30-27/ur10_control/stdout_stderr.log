@@ -1,0 +1,15 @@
+running develop
+running egg_info
+writing ur10_control.egg-info/PKG-INFO
+writing dependency_links to ur10_control.egg-info/dependency_links.txt
+writing requirements to ur10_control.egg-info/requires.txt
+writing top-level names to ur10_control.egg-info/top_level.txt
+reading manifest file 'ur10_control.egg-info/SOURCES.txt'
+writing manifest file 'ur10_control.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/lib/python3.10/site-packages/ur10-control.egg-link (link to .)
+
+Installed /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control
+running symlink_data
+symbolically linking /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/resource/ur10_control -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/share/ament_index/resource_index/packages
+symbolically linking /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/build/ur10_control/package.xml -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/install/ur10_control/share/ur10_control
