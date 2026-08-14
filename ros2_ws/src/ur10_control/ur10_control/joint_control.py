@@ -26,32 +26,20 @@ class UR10JointControl(Node):
             'wrist_3_joint'
         ]
 
-        self.get_logger().info('Waiting for MoveIt 2...')
-
         self.move_group_client.wait_for_server()
-
-        self.get_logger().info(
-            'MoveIt 2 MoveGroup action connected.'
-        )
 
     def create_goal(self, joint_positions):
 
         goal = MoveGroup.Goal()
 
-        # --------------------------------------------------
         # Planning request
-        # --------------------------------------------------
-
         goal.request.group_name = 'ur_manipulator'
 
-        # Slow down the motion
-        goal.request.max_velocity_scaling_factor = 0.1
-        goal.request.max_acceleration_scaling_factor = 0.1
+        # Motion scaling
+        goal.request.max_velocity_scaling_factor = 0.5
+        goal.request.max_acceleration_scaling_factor = 1.0
 
-        # --------------------------------------------------
         # Joint constraints
-        # --------------------------------------------------
-
         constraints = Constraints()
 
         for name, position in zip(
@@ -76,10 +64,7 @@ class UR10JointControl(Node):
             constraints
         )
 
-        # --------------------------------------------------
         # Planning options
-        # --------------------------------------------------
-
         goal.planning_options.plan_only = False
         goal.planning_options.look_around = False
         goal.planning_options.replan = True
@@ -87,10 +72,6 @@ class UR10JointControl(Node):
         return goal
 
     def move_to_position(self, joint_positions, description):
-
-        self.get_logger().info(
-            f'Moving to {description}...'
-        )
 
         goal = self.create_goal(joint_positions)
 
@@ -110,17 +91,8 @@ class UR10JointControl(Node):
         goal_handle = future.result()
 
         if not goal_handle.accepted:
-
-            self.get_logger().error(
-                f'Move to {description} was rejected.'
-            )
-
             rclpy.shutdown()
             return
-
-        self.get_logger().info(
-            f'{description} goal accepted.'
-        )
 
         result_future = goal_handle.get_result_async()
 
@@ -139,19 +111,8 @@ class UR10JointControl(Node):
 
         if error_code == 1:
 
-            self.get_logger().info(
-                f'{description} reached successfully!'
-            )
-
-            # ----------------------------------------------
             # START → TARGET
-            # ----------------------------------------------
-
             if description == 'START POSITION':
-
-                self.get_logger().info(
-                    'Starting movement to TARGET POSITION...'
-                )
 
                 self.move_to_position(
                     self.target_position,
@@ -160,18 +121,9 @@ class UR10JointControl(Node):
 
             else:
 
-                self.get_logger().info(
-                    'Motion sequence completed!'
-                )
-
                 rclpy.shutdown()
 
         else:
-
-            self.get_logger().error(
-                f'Motion to {description} failed. '
-                f'MoveIt error code: {error_code}'
-            )
 
             rclpy.shutdown()
 
@@ -182,23 +134,17 @@ def main(args=None):
 
     node = UR10JointControl()
 
-    # ======================================================
     # START POSITION
-    # ======================================================
-
     node.start_position = [
         -3.38,
         -1.57,
         2.18,
         -1.57,
-        -8.79, 
+        -8.79,
         -1.79
     ]
 
-    # ======================================================
     # TARGET POSITION
-    # ======================================================
-
     node.target_position = [
         0.0,
         -1.0,
@@ -207,30 +153,6 @@ def main(args=None):
         -1.57,
         0.0
     ]
-
-    # ======================================================
-    # START SEQUENCE
-    # ======================================================
-
-    node.get_logger().info(
-        '========================================'
-    )
-
-    node.get_logger().info(
-        'UR10 JOINT MOTION SEQUENCE'
-    )
-
-    node.get_logger().info(
-        '========================================'
-    )
-
-    node.get_logger().info(
-        'Step 1: Move to START POSITION'
-    )
-
-    node.get_logger().info(
-        'Step 2: Move to TARGET POSITION'
-    )
 
     node.move_to_position(
         node.start_position,
