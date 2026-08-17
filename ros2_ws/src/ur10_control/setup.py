@@ -51,6 +51,7 @@ setup(
             'joint_control = ur10_control.joint_control:main',
             'cartesian_control = ur10_control.cartesian_control:main',
             'joint_cartesian_control = ur10_control.joint_cartesian_control:main',
+            'cartesian_trajectory_control = ur10_control.cartesian_trajectory_control:main',
         ],
     },
 )

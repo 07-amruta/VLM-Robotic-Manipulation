@@ -113,6 +113,21 @@ Currently focusing on:
 
 Perception, VLM, Jetson deployment, and dual-arm manipulation will be integrated progressively.
 
+## ROS2 commands
+
+**Simulation of UR10**
+
+* For starting UR10 Control Stack
+
+```bash
+ros2 launch ur_robot_driver ur10.launch.py robot_ip:=127.0.0.1 use_fake_hardware:=true
+```
+
+* For starting UR10 MOVEIt2 Config
+```bash
+ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10
+```
+
 ## License
 
 This project is licensed under the **MIT License**.
