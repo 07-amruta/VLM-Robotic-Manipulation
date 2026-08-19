@@ -125,7 +125,12 @@ ros2 launch ur_robot_driver ur10.launch.py robot_ip:=127.0.0.1 use_fake_hardware
 
 * For starting UR10 MOVEIt2 Config
 ```bash
-ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10
+ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10 use_sim_time:=true
+```
+
+* For Gazebo Ignition Sim
+```bash
+ros2 launch ur10_control gazebo_simulation.launch.py
 ```
 
 ## License
