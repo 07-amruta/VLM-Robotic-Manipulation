@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+ur10_robotiq_3f.urdf.xacro
+
+Combines the stock Universal_Robots_ROS2_Description UR10 arm with the
+ported Robotiq 3-Finger Adaptive Gripper (articulated), attached at the
+arm's "tool0" link.
+
+This purposefully does NOT modify ur_description's files. It only
+includes ur_macro.xacro (as ur.urdf.xacro does) and adds the gripper
+on top, so upstream UR description updates can still be pulled cleanly.
+-->
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+
+  <xacro:arg name="name" default="ur"/>
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_macro.xacro"/>
+
+  <!-- possible 'ur_type' values: ur3, ur5, ur10, ur3e, ur5e, ur7e, ur10e, ur12e, ur16e, ur8long, ur15, ur18, ur20, ur30 -->
+  <xacro:arg name="ur_type" default="ur10"/>
+
+  <xacro:arg name="tf_prefix" default=""/>
+  <xacro:arg name="joint_limit_params" default="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"/>
+  <xacro:arg name="kinematics_params" default="$(find ur_description)/config/$(arg ur_type)/default_kinematics.yaml"/>
+  <xacro:arg name="physical_params" default="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"/>
+  <xacro:arg name="visual_params" default="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"/>
+  <xacro:arg name="transmission_hw_interface" default=""/>
+  <xacro:arg name="safety_limits" default="false"/>
+  <xacro:arg name="safety_pos_margin" default="0.15"/>
+  <xacro:arg name="safety_k_position" default="20"/>
+
+  <!-- gripper prefix, in case you ever need two arms/grippers in one urdf -->
+  <xacro:arg name="gripper_prefix" default="gripper_"/>
+
+  <link name="world"/>
+
+  <xacro:ur_robot
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    parent="world"
+    joint_limits_parameters_file="$(arg joint_limit_params)"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(arg physical_params)"
+    visual_parameters_file="$(arg visual_params)"
+    safety_limits="$(arg safety_limits)"
+    safety_pos_margin="$(arg safety_pos_margin)"
+    safety_k_position="$(arg safety_k_position)"
+    >
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <!-- attach the 3-finger gripper to the arm's tool0.
+       tf_prefix (if you set one) is applied to tool0 too. -->
+    <xacro:robotiq_3f_gripper_articulated prefix="$(arg gripper_prefix)" parent="$(arg tf_prefix)tool0">
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    </xacro:robotiq_3f_gripper_articulated>
+
+</robot>
