@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!--
+robotiq_3f_gripper_ros2_control(prefix, sim_ignition)
+
+Exposes only the 3 base knuckle joints (one per finger) as actuated
+DOFs to ros2_control. joint_2/joint_3 per finger remain fixed (see
+robotiq_3f_finger_macro.xacro) -- this is a deliberate simplification
+for a first working gripper-in-the-loop simulation.
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:macro name="robotiq_3f_gripper_ros2_control" params="prefix sim_ignition:=true">
+
+    <ros2_control name="${prefix}gripper_system" type="system">
+      <hardware>
+        <xacro:if value="${sim_ignition}">
+          <plugin>ign_ros2_control/IgnitionSystem</plugin>
+        </xacro:if>
+        <xacro:unless value="${sim_ignition}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:unless>
+      </hardware>
+      <joint name="${prefix}finger_1_joint_1">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${prefix}finger_2_joint_1">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="${prefix}finger_middle_joint_1">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </ros2_control>
+
+  </xacro:macro>
+</robot>

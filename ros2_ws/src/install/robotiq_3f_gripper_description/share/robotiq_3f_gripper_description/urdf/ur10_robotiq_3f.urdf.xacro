@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+
+  <xacro:arg name="name" default="ur10"/>
+  <xacro:arg name="tf_prefix" default=""/>
+  <xacro:arg name="gripper_prefix" default="gripper_"/>
+  <xacro:arg name="sim_ignition" default="true"/>
+
+  <xacro:include filename="$(find ur_description)/urdf/ur.urdf.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_macro.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_ros2_control.xacro"/>
+
+  <xacro:robotiq_3f_gripper_articulated prefix="$(arg gripper_prefix)" parent="$(arg tf_prefix)tool0">
+    <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+  </xacro:robotiq_3f_gripper_articulated>
+
+  <xacro:robotiq_3f_gripper_ros2_control prefix="$(arg gripper_prefix)" sim_ignition="$(arg sim_ignition)"/>
+
+</robot>

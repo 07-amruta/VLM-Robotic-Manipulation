@@ -3,7 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction
+from launch.actions import IncludeLaunchDescription, TimerAction, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable
 from launch_ros.actions import Node
@@ -21,9 +21,15 @@ def generate_launch_description():
     # the newer `gz_` prefixed ones (those start at Garden/Harmonic).
     # ---------------------------------------------------------
 
-    ur_description = get_package_share_directory("ur_description")
+    robotiq_gripper_description = get_package_share_directory("robotiq_3f_gripper_description")
     ros_ign_gazebo = get_package_share_directory("ros_ign_gazebo")
     ur10_control = get_package_share_directory("ur10_control")
+
+    # Ignition resolves package:// mesh URIs via GZ_SIM_RESOURCE_PATH /
+    # IGN_GAZEBO_RESOURCE_PATH, not the ROS package path -- RViz doesn't
+    # need this, but Ignition does, or meshes fail to load (SystemPaths
+    # "Unable to find file" errors) even though ros2_control works fine.
+    gripper_resource_path = os.path.join(robotiq_gripper_description, "..")
 
     # ---------------------------------------------------------
     # Gazebo controller configuration (unchanged - controller
@@ -53,9 +59,9 @@ def generate_launch_description():
         FindExecutable(name="xacro"),
         " ",
         os.path.join(
-            ur_description,
+            robotiq_gripper_description,
             "urdf",
-            "ur.urdf.xacro",
+            "ur10_robotiq_3f.urdf.xacro",
         ),
         " ",
         "name:=ur10",
@@ -174,11 +180,32 @@ def generate_launch_description():
         output="screen",
     )
 
+    gripper_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "gripper_controller",
+            "--controller-manager",
+            "/controller_manager",
+        ],
+        output="screen",
+    )
+
     # ---------------------------------------------------------
     # Launch everything
     # ---------------------------------------------------------
 
     return LaunchDescription([
+
+        SetEnvironmentVariable(
+            name="IGN_GAZEBO_RESOURCE_PATH",
+            value=os.path.join(robotiq_gripper_description, ".."),
+        ),
+        SetEnvironmentVariable(
+            name="GZ_SIM_RESOURCE_PATH",
+            value=os.path.join(robotiq_gripper_description, ".."),
+        ),
+
         gazebo,
 
         clock_bridge,
@@ -194,6 +221,7 @@ def generate_launch_description():
             actions=[
                 joint_state_broadcaster_spawner,
                 trajectory_controller_spawner,
+                gripper_controller_spawner,
             ],
         ),
     ])

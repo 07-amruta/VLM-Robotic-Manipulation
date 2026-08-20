@@ -1,0 +1,20 @@
+planning_plugins:
+  - ompl_interface/OMPLPlanner
+request_adapters: >-
+  default_planning_request_adapters/ResolveConstraintFrames
+  default_planning_request_adapters/ValidateWorkspaceBounds
+  default_planning_request_adapters/CheckStartStateBounds
+  default_planning_request_adapters/CheckStartStateCollision
+response_adapters: >-
+  default_planning_response_adapters/AddTimeOptimalParameterization
+  default_planning_response_adapters/ValidateSolution
+  default_planning_response_adapters/DisplayMotionPath
+
+ur_manipulator:
+  planner_configs:
+    - RRTConnectkConfigDefault
+  projection_evaluator: joints(shoulder_pan_joint,shoulder_lift_joint)
+
+RRTConnectkConfigDefault:
+  type: geometric::RRTConnect
+  range: 0.0

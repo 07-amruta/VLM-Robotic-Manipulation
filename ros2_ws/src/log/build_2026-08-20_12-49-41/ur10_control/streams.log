@@ -1,0 +1,53 @@
+[0.768s] Invoking command in '/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/ur10_control': PYTHONPATH=/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/ur10_control build --build-base /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build install --record /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/install.log --single-version-externally-managed install_data
+[1.027s] running egg_info
+[1.043s] creating ../build/ur10_control/ur10_control.egg-info
+[1.043s] writing ../build/ur10_control/ur10_control.egg-info/PKG-INFO
+[1.043s] writing dependency_links to ../build/ur10_control/ur10_control.egg-info/dependency_links.txt
+[1.043s] writing entry points to ../build/ur10_control/ur10_control.egg-info/entry_points.txt
+[1.044s] writing requirements to ../build/ur10_control/ur10_control.egg-info/requires.txt
+[1.044s] writing top-level names to ../build/ur10_control/ur10_control.egg-info/top_level.txt
+[1.044s] writing manifest file '../build/ur10_control/ur10_control.egg-info/SOURCES.txt'
+[1.089s] reading manifest file '../build/ur10_control/ur10_control.egg-info/SOURCES.txt'
+[1.090s] writing manifest file '../build/ur10_control/ur10_control.egg-info/SOURCES.txt'
+[1.091s] running build
+[1.091s] running build_py
+[1.091s] creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.091s] copying ur10_control/__init__.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.091s] copying ur10_control/cartesian_trajectory_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.091s] copying ur10_control/joint_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.091s] copying ur10_control/gripper_test.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.091s] copying ur10_control/cartesian_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.092s] copying ur10_control/joint_cartesian_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control
+[1.092s] running install
+[1.096s] running install_lib
+[1.111s] creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/__init__.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/cartesian_trajectory_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/joint_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/gripper_test.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/cartesian_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.111s] copying /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build/lib/ur10_control/joint_cartesian_control.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control
+[1.112s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/__init__.py to __init__.cpython-310.pyc
+[1.112s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/cartesian_trajectory_control.py to cartesian_trajectory_control.cpython-310.pyc
+[1.114s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/joint_control.py to joint_control.cpython-310.pyc
+[1.114s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/gripper_test.py to gripper_test.cpython-310.pyc
+[1.115s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/cartesian_control.py to cartesian_control.cpython-310.pyc
+[1.116s] byte-compiling /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control/joint_cartesian_control.py to joint_cartesian_control.cpython-310.pyc
+[1.117s] running install_data
+[1.117s] creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ament_index/resource_index/packages
+[1.117s] copying resource/ur10_control -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ament_index/resource_index/packages
+[1.117s] copying package.xml -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ur10_control
+[1.117s] creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ur10_control/launch
+[1.117s] copying launch/gazebo_simulation.launch.py -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ur10_control/launch
+[1.118s] creating /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ur10_control/config
+[1.118s] copying config/gazebo_controllers.yaml -> /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/share/ur10_control/config
+[1.118s] running install_egg_info
+[1.134s] Copying ../build/ur10_control/ur10_control.egg-info to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages/ur10_control-0.1.0-py3.10.egg-info
+[1.134s] running install_scripts
+[1.251s] Installing cartesian_control script to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/ur10_control
+[1.251s] Installing cartesian_trajectory_control script to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/ur10_control
+[1.251s] Installing gripper_test script to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/ur10_control
+[1.251s] Installing joint_cartesian_control script to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/ur10_control
+[1.251s] Installing joint_control script to /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/ur10_control
+[1.251s] writing list of installed files to '/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/install.log'
+[1.277s] Invoked command in '/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/ur10_control' returned '0': PYTHONPATH=/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/install/ur10_control/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/ur10_control build --build-base /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/build install --record /home/scg/Documents/AP/VLM-Robotic-Manipulation/ros2_ws/src/build/ur10_control/install.log --single-version-externally-managed install_data

@@ -117,6 +117,12 @@ Perception, VLM, Jetson deployment, and dual-arm manipulation will be integrated
 
 **Simulation of UR10**
 
+* Packages Build Command
+
+```bash
+colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_gripper_moveit_config
+```
+
 * For starting UR10 Control Stack
 
 ```bash

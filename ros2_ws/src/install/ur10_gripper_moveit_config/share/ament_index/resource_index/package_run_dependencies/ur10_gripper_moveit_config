@@ -1,0 +1,1 @@
+moveit_ros_move_group;moveit_kinematics;moveit_planners_ompl;moveit_ros_visualization;joint_state_publisher;robot_state_publisher;rviz2;xacro;robotiq_3f_gripper_description
