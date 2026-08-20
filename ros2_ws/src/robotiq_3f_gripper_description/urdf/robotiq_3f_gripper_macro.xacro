@@ -43,7 +43,11 @@ Usage from a top-level xacro:
       <inertial>
         <origin xyz="0 0 0" rpy="0 0 0"/>
         <mass value="1.3"/>
-        <inertia ixx="0.006012" ixy="0.000079" ixz="-0.00024" iyy="0.012892" iyz="0" izz="0.002435"/>
+        <!-- box approximation (~0.09 x 0.09 x 0.06 m), triangle-inequality-valid.
+             Original Robotiq spec values (ixx=0.006012, ixy=0.000079, ixz=-0.00024,
+             iyy=0.012892, izz=0.002435) fail ixx+izz >= iyy and are rejected by
+             SDFormat once lumped with the finger_middle branch. -->
+        <inertia ixx="0.0012675" ixy="0" ixz="0" iyy="0.0012675" iyz="0" izz="0.001755"/>
       </inertial>
     </link>
 
@@ -69,7 +73,7 @@ Usage from a top-level xacro:
       <child link="${prefix}finger_2_link_0"/>
       <origin xyz="-0.0455 0.0214 -0.036" rpy="0 3.1416 -1.57"/>
     </joint>
-    <joint name="${prefix}palm_finger_middle_joint" type="fixed">
+        <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
       <origin xyz="0.0455 0.0214 0" rpy="0 0 1.57"/>

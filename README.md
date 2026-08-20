@@ -139,6 +139,11 @@ ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10 use_sim_time:=tru
 ros2 launch ur10_control gazebo_simulation.launch.py
 ```
 
+* For Gripper Moveit2 Sim
+```bash
+ros2 launch ur10_gripper_moveit_config move_group.launch.py
+```
+
 ## License
 
 This project is licensed under the **MIT License**.

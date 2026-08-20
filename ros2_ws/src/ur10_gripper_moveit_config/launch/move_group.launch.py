@@ -35,6 +35,21 @@ def generate_launch_description():
     moveit_controllers = load_yaml(moveit_config_pkg, "config/moveit_controllers.yaml")
     ompl_planning = load_yaml(moveit_config_pkg, "config/ompl_planning.yaml")
 
+    trajectory_execution = {
+        "moveit_manage_controllers": True,
+        "moveit_controller_manager": "moveit_simple_controller_manager/MoveItSimpleControllerManager",
+        "trajectory_execution.allowed_execution_duration_scaling": 1.2,
+        "trajectory_execution.allowed_goal_duration_margin": 0.5,
+        "trajectory_execution.allowed_start_tolerance": 0.01,
+    }
+
+    planning_scene_monitor_parameters = {
+        "publish_planning_scene": True,
+        "publish_geometry_updates": True,
+        "publish_state_updates": True,
+        "publish_transforms_updates": True,
+    }
+
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
@@ -45,6 +60,8 @@ def generate_launch_description():
             {"robot_description_kinematics": kinematics},
             {"robot_description_planning": joint_limits},
             moveit_controllers,
+            trajectory_execution,
+            planning_scene_monitor_parameters,
             ompl_planning,
             {"use_sim_time": True},
             {"publish_robot_description_semantic": True},
@@ -60,6 +77,7 @@ def generate_launch_description():
             {"robot_description": robot_description},
             {"robot_description_semantic": robot_description_semantic},
             {"robot_description_kinematics": kinematics},
+            planning_scene_monitor_parameters,
             {"use_sim_time": True},
         ],
     )
