@@ -63,6 +63,22 @@ Usage from a top-level xacro:
     <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_"/>
     <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_"/>
 
+    <gazebo reference="${prefix}palm">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+    <gazebo reference="${prefix}finger_middle_link_0">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+    <gazebo reference="${prefix}finger_middle_link_1">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+    <gazebo reference="${prefix}finger_middle_link_2">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+    <gazebo reference="${prefix}finger_middle_link_3">
+      <selfCollide>false</selfCollide>
+    </gazebo>
+
     <joint name="${prefix}palm_finger_1_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_1_link_0"/>
@@ -73,7 +89,7 @@ Usage from a top-level xacro:
       <child link="${prefix}finger_2_link_0"/>
       <origin xyz="-0.0455 0.0214 -0.036" rpy="0 3.1416 -1.57"/>
     </joint>
-        <joint name="${prefix}palm_finger_middle_joint" type="fixed">
+    <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
       <origin xyz="0.0455 0.0214 0" rpy="0 0 1.57"/>

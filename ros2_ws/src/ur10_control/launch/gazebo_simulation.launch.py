@@ -7,6 +7,7 @@ from launch.actions import IncludeLaunchDescription, TimerAction, SetEnvironment
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -55,24 +56,27 @@ def generate_launch_description():
     # against Ignition/Gazebo Sim at all.
     # ---------------------------------------------------------
 
-    robot_description = Command([
-        FindExecutable(name="xacro"),
-        " ",
-        os.path.join(
-            robotiq_gripper_description,
-            "urdf",
-            "ur10_robotiq_3f.urdf.xacro",
-        ),
-        " ",
-        "name:=ur10",
-        " ",
-        "ur_type:=ur10",
-        " ",
-        "sim_ignition:=true",
-        " ",
-        "simulation_controllers:=",
-        controllers_file,
-    ])
+    robot_description = ParameterValue(
+        Command([
+            FindExecutable(name="xacro"),
+            " ",
+            os.path.join(
+                robotiq_gripper_description,
+                "urdf",
+                "ur10_robotiq_3f.urdf.xacro",
+            ),
+            " ",
+            "name:=ur10",
+            " ",
+            "ur_type:=ur10",
+            " ",
+            "sim_ignition:=true",
+            " ",
+            "simulation_controllers:=",
+            controllers_file,
+        ]),
+        value_type=str,
+    )
 
     # ---------------------------------------------------------
     # Start Gazebo Fortress (Ignition Gazebo)
