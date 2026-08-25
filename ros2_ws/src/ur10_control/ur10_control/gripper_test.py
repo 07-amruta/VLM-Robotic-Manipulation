@@ -23,7 +23,9 @@ GRIPPER_JOINTS = [
     "gripper_finger_middle_joint_1",
 ]
 
-# joint_1 limits are [0.0495, 1.2218] on each finger (0 ~= open, upper ~= closed)
+# The middle-finger URDF axis is intentionally inverted so that the finger's
+# physical motion matches the other two when all three joints are commanded with
+# the same positive sign convention.
 OPEN_POSITIONS = [0.05, 0.05, 0.05]
 CLOSE_POSITIONS = [1.0, 1.0, 1.0]
 
