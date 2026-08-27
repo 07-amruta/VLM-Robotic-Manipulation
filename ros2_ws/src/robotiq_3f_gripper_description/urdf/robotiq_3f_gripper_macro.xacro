@@ -59,12 +59,9 @@ Usage from a top-level xacro:
       <origin xyz="0.0 0.0875 0.0" rpy="0 0 1.5707"/>
     </joint>
 
-    <!-- The middle finger's axis is intentionally inverted so that the same positive
-         command signals all three fingers to close/open in the same physical direction.
-         Keep the palm mount orientation at 0 0 1.57 to preserve the Robotiq layout. -->
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_" axis_sign="1"/>
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_" axis_sign="1"/>
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_" axis_sign="1"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_"/>
 
     <joint name="${prefix}palm_finger_1_joint" type="fixed">
       <parent link="${prefix}palm"/>
@@ -79,9 +76,9 @@ Usage from a top-level xacro:
     <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
-      <!-- The middle finger is mounted on the opposite side of the palm, so it needs the
-           same 180° pitch flip as the mirrored A/B finger frames. This keeps the center
-           finger facing the other two instead of lying in the same in-plane orientation. -->
+      <!-- Official Robotiq 3F mounting: the middle finger is mounted with a yaw-only
+           rotation in the palm frame. The inverse motion is handled by the command-space
+           sign, not by rotating the physical frame away from the real Robotiq layout. -->
       <origin xyz="0.0455 0.0214 0" rpy="0 0 1.57"/>
     </joint>
 

@@ -23,11 +23,11 @@ GRIPPER_JOINTS = [
     "gripper_finger_middle_joint_1",
 ]
 
-# The middle-finger URDF axis is intentionally inverted so that the finger's
-# physical motion matches the other two when all three joints are commanded with
-# the same positive sign convention.
-OPEN_POSITIONS = [0.05, 0.05, 0.05]
-CLOSE_POSITIONS = [1.0, 1.0, 1.0]
+# Restore the official Robotiq 3F geometry and apply the opposite sign to the
+# middle finger command so the middle finger closes/open in the physical opposite
+# direction while the side fingers move together.
+OPEN_POSITIONS = [0.05, 0.05, -0.05]
+CLOSE_POSITIONS = [1.0, 1.0, -1.0]
 
 
 class GripperTestClient(Node):

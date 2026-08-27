@@ -16,12 +16,12 @@
   <group_state name="open" group="gripper">
     <joint name="gripper_finger_1_joint_1" value="0.05"/>
     <joint name="gripper_finger_2_joint_1" value="0.05"/>
-    <joint name="gripper_finger_middle_joint_1" value="0.05"/>
+    <joint name="gripper_finger_middle_joint_1" value="-0.05"/>
   </group_state>
   <group_state name="closed" group="gripper">
     <joint name="gripper_finger_1_joint_1" value="1.0"/>
     <joint name="gripper_finger_2_joint_1" value="1.0"/>
-    <joint name="gripper_finger_middle_joint_1" value="1.0"/>
+    <joint name="gripper_finger_middle_joint_1" value="-1.0"/>
   </group_state>
 
   <group_state name="home" group="ur_manipulator">
