@@ -76,9 +76,10 @@ Usage from a top-level xacro:
     <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
-      <!-- Keep the physical middle-finger frame aligned to the official Robotiq 3F
-           mount. No mirrored or flipped transform is introduced here; the motion is
-           kept independent in command space so the tool model remains consistent. -->
+      <!-- Preserve the official Robotiq 3F palm mount for the middle finger. The
+           frame is only yawed into the palm coordinate frame; no mirrored or flipped
+           axis is introduced, and the commanded joint values stay within the
+           positive URDF range defined in robotiq_3f_gripper_ros2_control.xacro. -->
       <origin xyz="0.0455 0.0214 0" rpy="0 0 1.57"/>
     </joint>
 

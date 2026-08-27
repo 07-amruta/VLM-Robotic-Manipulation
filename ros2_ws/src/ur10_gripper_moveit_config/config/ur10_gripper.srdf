@@ -13,15 +13,19 @@
 
   <end_effector name="robotiq_3f" parent_link="tool0" group="gripper"/>
 
+  <!-- Keep the gripper joint-space values consistent with the URDF limits. The
+       Robotiq 3F middle finger is mounted in the official palm orientation with no
+       mirrored or flipped axis transform, so the open/close setpoints remain
+       positive and follow the controller command values directly. -->
   <group_state name="open" group="gripper">
     <joint name="gripper_finger_1_joint_1" value="0.05"/>
     <joint name="gripper_finger_2_joint_1" value="0.05"/>
-    <joint name="gripper_finger_middle_joint_1" value="-0.05"/>
+    <joint name="gripper_finger_middle_joint_1" value="0.05"/>
   </group_state>
   <group_state name="closed" group="gripper">
     <joint name="gripper_finger_1_joint_1" value="1.0"/>
     <joint name="gripper_finger_2_joint_1" value="1.0"/>
-    <joint name="gripper_finger_middle_joint_1" value="-1.0"/>
+    <joint name="gripper_finger_middle_joint_1" value="1.0"/>
   </group_state>
 
   <group_state name="home" group="ur_manipulator">

@@ -101,6 +101,9 @@ Creates one articulated finger (3 revolute joints) with the given prefix.
     <joint name="${prefix}joint_1" type="revolute">
       <parent link="${prefix}link_0"/>
       <child link="${prefix}link_1"/>
+      <!-- Keep the finger axis aligned with the official Robotiq Z-axis rotation.
+           This is not mirrored or flipped relative to the palm frame, and the
+           commanded position stays in the valid positive range. -->
       <axis xyz="0 0 1"/>
       <origin xyz="0.020 0 0" rpy="0 0 0"/>
       <limit lower="0.0495" upper="1.2218" effort="100" velocity="1.0"/>
