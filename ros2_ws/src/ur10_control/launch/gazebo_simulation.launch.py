@@ -195,6 +195,17 @@ def generate_launch_description():
         output="screen",
     )
 
+    gripper_middle_joint_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[
+            "gripper_middle_joint_controller",
+            "--controller-manager",
+            "/controller_manager",
+        ],
+        output="screen",
+    )
+
     # ---------------------------------------------------------
     # Launch everything
     # ---------------------------------------------------------
@@ -226,6 +237,7 @@ def generate_launch_description():
                 joint_state_broadcaster_spawner,
                 trajectory_controller_spawner,
                 gripper_controller_spawner,
+                gripper_middle_joint_controller_spawner,
             ],
         ),
     ])

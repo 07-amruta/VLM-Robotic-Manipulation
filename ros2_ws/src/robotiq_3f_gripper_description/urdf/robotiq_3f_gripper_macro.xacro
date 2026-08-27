@@ -76,9 +76,9 @@ Usage from a top-level xacro:
     <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
-      <!-- Official Robotiq 3F mounting: the middle finger is mounted with a yaw-only
-           rotation in the palm frame. The inverse motion is handled by the command-space
-           sign, not by rotating the physical frame away from the real Robotiq layout. -->
+      <!-- Keep the physical middle-finger frame aligned to the official Robotiq 3F
+           mount. No mirrored or flipped transform is introduced here; the motion is
+           kept independent in command space so the tool model remains consistent. -->
       <origin xyz="0.0455 0.0214 0" rpy="0 0 1.57"/>
     </joint>
 
