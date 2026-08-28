@@ -61,7 +61,7 @@ Usage from a top-level xacro:
 
     <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_" axis_sign="1"/>
     <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_" axis_sign="1"/>
-    <xacro:robotiq_3f_middle_finger_articulated prefix="${prefix}finger_middle_"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_" axis_sign="-1" face_flip="-1"/>
 
     <joint name="${prefix}palm_finger_1_joint" type="fixed">
       <parent link="${prefix}palm"/>
@@ -76,10 +76,8 @@ Usage from a top-level xacro:
     <joint name="${prefix}palm_finger_middle_joint" type="fixed">
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
-      <!-- The middle finger sits on the opposite side of the palm and needs the
-           same mirror/pitch adjustment that the original Robotiq geometry used,
-           while the mirrored joint sign keeps the command convention consistent. -->
-      <origin xyz="0.0455 0.0214 0" rpy="0 3.1416 1.57"/>
+      <!-- Keep the middle finger in the original Robotiq in-plane orientation. -->
+      <origin xyz="0.0455 0.0214 0" rpy="0 3.1416 -1.57"/>
     </joint>
 
   </xacro:macro>

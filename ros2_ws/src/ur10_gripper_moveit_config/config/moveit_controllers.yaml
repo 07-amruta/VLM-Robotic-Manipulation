@@ -2,7 +2,6 @@ moveit_simple_controller_manager:
   controller_names:
     - joint_trajectory_controller
     - gripper_controller
-    - gripper_middle_joint_controller
 
   joint_trajectory_controller:
     action_ns: follow_joint_trajectory
@@ -23,10 +22,4 @@ moveit_simple_controller_manager:
     joints:
       - gripper_finger_1_joint_1
       - gripper_finger_2_joint_1
-
-  gripper_middle_joint_controller:
-    action_ns: follow_joint_trajectory
-    type: FollowJointTrajectory
-    default: true
-    joints:
       - gripper_finger_middle_joint_1

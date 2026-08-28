@@ -35,7 +35,10 @@ class MiddleJointController(_JointController):
     """Controls the middle finger independently and keeps the physical orientation fixed."""
 
     def command(self, position: float) -> float:
-        return self.clamp(position)
+        # Invert the middle-joint command so the physical open/close direction matches
+        # the user-facing gripper intent instead of the mirrored joint sign.
+        mirrored = self.min_value + self.max_value - float(position)
+        return self.clamp(mirrored)
 
 
 @dataclass(frozen=True)
