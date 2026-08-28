@@ -144,6 +144,11 @@ ros2 launch ur10_control gazebo_simulation.launch.py
 ros2 launch ur10_gripper_moveit_config move_group.launch.py
 ```
 
+* For Sourcing the Workspace
+```bash
+source install/setup.bash
+```
+
 ## License
 
 This project is licensed under the **MIT License**.
