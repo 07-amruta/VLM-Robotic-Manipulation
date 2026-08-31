@@ -62,7 +62,7 @@ def generate_launch_description():
             moveit_controllers,
             trajectory_execution,
             planning_scene_monitor_parameters,
-            ompl_planning,
+            {"move_group": ompl_planning},
             {"use_sim_time": True},
             {"publish_robot_description_semantic": True},
         ],

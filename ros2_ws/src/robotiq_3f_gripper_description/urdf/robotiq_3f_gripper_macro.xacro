@@ -77,7 +77,7 @@ Usage from a top-level xacro:
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
       <!-- Keep the middle finger in the original Robotiq in-plane orientation. -->
-      <origin xyz="0.0455 0.0214 0" rpy="0 3.1416 -1.57"/>
+      <origin xyz="0.0580 0.0214 0" rpy="0 3.1416 -1.95"/>
     </joint>
 
   </xacro:macro>

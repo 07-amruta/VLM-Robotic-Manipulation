@@ -29,8 +29,8 @@ JOINTS = [
 OPEN_POSITIONS = [0.05, 0.05, 0.05]
 # Side fingers and middle finger can be tuned independently — start here and
 # adjust based on what you see, see tuning note below.
-CLOSE_SIDE = 0.3
-CLOSE_MIDDLE = 0.3
+CLOSE_SIDE = 0.7
+CLOSE_MIDDLE = 0.7
 CLOSE_POSITIONS = [CLOSE_SIDE, CLOSE_SIDE, CLOSE_MIDDLE]
 
 # Number of intermediate waypoints (not counting the start) and total duration.

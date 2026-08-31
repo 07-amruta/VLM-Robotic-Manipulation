@@ -53,6 +53,7 @@ setup(
             'joint_cartesian_control = ur10_control.joint_cartesian_control:main',
             'cartesian_trajectory_control = ur10_control.cartesian_trajectory_control:main',
             'gripper_test = ur10_control.gripper_test:main',
+            'ur_gripper_sequence = ur10_control.ur_gripper_sequence:main',
         ],
     },
 )
