@@ -144,6 +144,16 @@ ros2 launch ur10_control gazebo_simulation.launch.py
 ros2 launch ur10_gripper_moveit_config move_group.launch.py
 ```
 
+* For Hardware UR10 Arm Control
+```bash
+ros2 launch ur_robot_driver ur_control.launch.py   ur_type:=ur10   robot_ip:=192.168.1.102   kinematics_params_file:="${HOME}/my_robot_calibration.yaml"
+```
+
+* For Robot Arm Caliberation
+```bash
+ros2 launch ur_calibration calibration_correction.launch.py robot_ip:=192.168.1.102 target_filename:="${HOME}/my_robot_calibration.yaml"
+```
+
 * For Sourcing the Workspace
 ```bash
 source install/setup.bash
