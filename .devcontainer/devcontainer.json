@@ -1,0 +1,38 @@
+{
+  "name": "ur10-robotiq-vlm-dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
+  "mounts": [
+    "source=devcontainer-bashhistory,target=/root/.bash_history_dir,type=volume"
+  ],
+  "runArgs": [
+    "--gpus=all",
+    "--env=DISPLAY=${localEnv:DISPLAY}",
+    "--env=QT_X11_NO_MITSHM=1",
+    "--env=NVIDIA_DRIVER_CAPABILITIES=all",
+    "--env=NVIDIA_VISIBLE_DEVICES=all",
+    "--env=__NV_PRIME_RENDER_OFFLOAD=1",
+    "--env=__GLX_VENDOR_LIBRARY_NAME=nvidia",
+    "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+    "--device=/dev/dri:/dev/dri",
+    "--network=host"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.cpptools",
+        "ms-iot.vscode-ros",
+        "twxs.cmake",
+        "redhat.vscode-yaml",
+        "actboy168.tasks"
+      ]
+    }
+  },
+  "postCreateCommand": "sudo rosdep update && echo 'Dev container ready. Run: cd ${containerWorkspaceFolder}/ros2_ws && colcon build --symlink-install'",
+  "remoteUser": "root"
+}
