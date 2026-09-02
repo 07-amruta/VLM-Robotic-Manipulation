@@ -117,16 +117,28 @@ Perception, VLM, Jetson deployment, and dual-arm manipulation will be integrated
 
 **Simulation of UR10**
 
+* X11 Permission for GPU
+
+```bash
+xhost +local:docker
+```
+
 * All Packages - Robot Bringup Build
 
 ```bash
-colcon build --packages-up-to robot_bringup --symlink-install --allow-overriding ur_description
+colcon build --packages-up-to robot_bringup --symlink-install
 ```
 
 * Packages Build Command
 
 ```bash
 colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_gripper_moveit_config --symlink-install
+```
+
+* For Robot Bringup Launch
+
+```bash
+ros2 launch robot_bringup bringup.launch.py
 ```
 
 * For starting UR10 Control Stack
