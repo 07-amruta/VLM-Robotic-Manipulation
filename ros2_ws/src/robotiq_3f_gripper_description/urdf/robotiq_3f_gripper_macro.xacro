@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!--
+robotiq_3f_gripper_articulated(prefix, parent, *origin)
+
+Ported from ros-industrial-attic/robotiq (ROS1) to ROS 2 / ament_cmake.
+Original package: BSD licensed, Robotiq Inc. / Jean-Philippe Roberge, Nicolas Lauzier.
+
+Assembles the palm + three articulated fingers and attaches the whole
+gripper to a parent link (e.g. a UR arm's "tool0") via a fixed joint.
+
+Usage from a top-level xacro:
+
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_macro.xacro"/>
+  <xacro:robotiq_3f_gripper_articulated prefix="gripper_" parent="tool0">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robotiq_3f_gripper_articulated>
+-->
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_finger_macro.xacro"/>
+
+  <xacro:macro name="robotiq_3f_gripper_articulated" params="prefix parent *origin">
+
+    <joint name="${prefix}palm_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}palm"/>
+      <xacro:insert_block name="origin"/>
+    </joint>
+
+    <link name="${prefix}palm">
+      <visual>
+        <geometry>
+          <mesh filename="package://robotiq_3f_gripper_description/meshes/visual/palm.dae"/>
+        </geometry>
+        <material name="gripper_dark">
+          <color rgba="0.12 0.12 0.13 1"/>
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <mesh filename="package://robotiq_3f_gripper_description/meshes/collision/palm.STL"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="1.3"/>
+        <!-- box approximation (~0.09 x 0.09 x 0.06 m), triangle-inequality-valid.
+             Original Robotiq spec values (ixx=0.006012, ixy=0.000079, ixz=-0.00024,
+             iyy=0.012892, izz=0.002435) fail ixx+izz >= iyy and are rejected by
+             SDFormat once lumped with the finger_middle branch. -->
+        <inertia ixx="0.0012675" ixy="0" ixz="0" iyy="0.0012675" iyz="0" izz="0.001755"/>
+      </inertial>
+    </link>
+
+    <!-- gripper-frame tool tip, offset the way the ROS1 model defined it -->
+    <link name="${prefix}tool0"/>
+    <joint name="${prefix}palm_tool0" type="fixed">
+      <parent link="${prefix}palm"/>
+      <child link="${prefix}tool0"/>
+      <origin xyz="0.0 0.0875 0.0" rpy="0 0 1.5707"/>
+    </joint>
+
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_" axis_sign="1"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_" axis_sign="1"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_" axis_sign="-1" face_flip="-1"/>
+
+    <joint name="${prefix}palm_finger_1_joint" type="fixed">
+      <parent link="${prefix}palm"/>
+      <child link="${prefix}finger_1_link_0"/>
+      <origin xyz="-0.0455 0.0214 0.036" rpy="0 3.1416 -1.57"/>
+    </joint>
+    <joint name="${prefix}palm_finger_2_joint" type="fixed">
+      <parent link="${prefix}palm"/>
+      <child link="${prefix}finger_2_link_0"/>
+      <origin xyz="-0.0455 0.0214 -0.036" rpy="0 3.1416 -1.57"/>
+    </joint>
+    <joint name="${prefix}palm_finger_middle_joint" type="fixed">
+      <parent link="${prefix}palm"/>
+      <child link="${prefix}finger_middle_link_0"/>
+      <!-- Keep the middle finger in the original Robotiq in-plane orientation. -->
+      <origin xyz="0.0580 0.0214 0" rpy="0 3.1416 -1.95"/>
+    </joint>
+
+  </xacro:macro>
+</robot>
