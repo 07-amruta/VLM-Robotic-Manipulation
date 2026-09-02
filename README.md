@@ -117,6 +117,12 @@ Perception, VLM, Jetson deployment, and dual-arm manipulation will be integrated
 
 **Simulation of UR10**
 
+* All Packages - Robot Bringup Build
+
+```bash
+colcon build --packages-up-to robot_bringup --symlink-install --allow-overriding ur_description
+```
+
 * Packages Build Command
 
 ```bash
@@ -130,31 +136,37 @@ ros2 launch ur_robot_driver ur10.launch.py robot_ip:=127.0.0.1 use_fake_hardware
 ```
 
 * For starting UR10 MOVEIt2 Config
+
 ```bash
 ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur10 use_sim_time:=true
 ```
 
 * For Gazebo Ignition Sim
+
 ```bash
 ros2 launch ur10_control gazebo_simulation.launch.py
 ```
 
 * For Gripper Moveit2 Sim
+
 ```bash
 ros2 launch ur10_gripper_moveit_config move_group.launch.py
 ```
 
 * For Hardware UR10 Arm Control
+
 ```bash
 ros2 launch ur_robot_driver ur_control.launch.py   ur_type:=ur10   robot_ip:=192.168.1.102   kinematics_params_file:="${HOME}/my_robot_calibration.yaml"
 ```
 
 * For Robot Arm Caliberation
+
 ```bash
 ros2 launch ur_calibration calibration_correction.launch.py robot_ip:=192.168.1.102 target_filename:="${HOME}/my_robot_calibration.yaml"
 ```
 
 * For Sourcing the Workspace
+
 ```bash
 source install/setup.bash
 ```
