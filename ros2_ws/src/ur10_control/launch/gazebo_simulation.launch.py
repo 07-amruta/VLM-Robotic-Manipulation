@@ -23,7 +23,7 @@ def generate_launch_description():
     # ---------------------------------------------------------
 
     robotiq_gripper_description = get_package_share_directory("robotiq_3f_gripper_description")
-    ros_ign_gazebo = get_package_share_directory("ros_ign_gazebo")
+    ros_ign_gazebo = get_package_share_directory("ros_gz_sim")
     ur10_control = get_package_share_directory("ur10_control")
 
     # Ignition resolves package:// mesh URIs via GZ_SIM_RESOURCE_PATH /
@@ -92,10 +92,10 @@ def generate_launch_description():
             os.path.join(
                 ros_ign_gazebo,
                 "launch",
-                "ign_gazebo.launch.py",
+                "gz_sim.launch.py",
             )
         ),
-        launch_arguments={"ign_args": "-r empty.sdf"}.items(),
+        launch_arguments={"gz_args": "-r empty.sdf"}.items(),
     )
 
     # ---------------------------------------------------------
@@ -108,7 +108,7 @@ def generate_launch_description():
     # ---------------------------------------------------------
 
     clock_bridge = Node(
-        package="ros_ign_bridge",
+        package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock"
@@ -141,7 +141,7 @@ def generate_launch_description():
     # ---------------------------------------------------------
 
     spawn_robot = Node(
-        package="ros_ign_gazebo",
+        package="ros_gz_sim",
         executable="create",
         arguments=[
             "-topic",
