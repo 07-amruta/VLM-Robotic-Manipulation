@@ -53,7 +53,7 @@ from lifecycle_msgs.msg import State as LifecycleState
 from rclpy.node import Node
 
 sys.path.append(os.path.dirname(__file__))
-from test_common import (  # noqa: E402
+from ros2_ws.src.vendor.Universal_Robots_ROS2_Driver.ur_robot_driver.test.test_common import (  # noqa: E402
     ControllerManagerInterface,
     generate_driver_test_description_for_model,
 )

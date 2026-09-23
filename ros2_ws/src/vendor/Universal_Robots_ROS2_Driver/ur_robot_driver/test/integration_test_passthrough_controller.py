@@ -44,7 +44,7 @@ from rclpy.node import Node
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 sys.path.append(os.path.dirname(__file__))
-from test_common import (  # noqa: E402
+from ros2_ws.src.vendor.Universal_Robots_ROS2_Driver.ur_robot_driver.test.test_common import (  # noqa: E402
     ActionInterface,
     ControllerManagerInterface,
     DashboardInterface,

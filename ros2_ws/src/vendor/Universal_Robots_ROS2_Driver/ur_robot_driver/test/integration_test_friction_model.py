@@ -50,7 +50,7 @@ from controller_manager_msgs.srv import SwitchController
 from ur_msgs.msg import FrictionModelParameters
 
 sys.path.append(os.path.dirname(__file__))
-from test_common import (  # noqa: E402
+from ros2_ws.src.vendor.Universal_Robots_ROS2_Driver.ur_robot_driver.test.test_common import (  # noqa: E402
     ControllerManagerInterface,
     DashboardInterface,
     FrictionModelInterface,

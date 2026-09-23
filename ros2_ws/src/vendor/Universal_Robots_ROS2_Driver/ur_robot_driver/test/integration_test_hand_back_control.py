@@ -44,7 +44,7 @@ from std_msgs.msg import Bool
 from ur_dashboard_msgs.msg import ProgramState
 
 sys.path.append(os.path.dirname(__file__))
-from test_common import (  # noqa: E402
+from ros2_ws.src.vendor.Universal_Robots_ROS2_Driver.ur_robot_driver.test.test_common import (  # noqa: E402
     generate_driver_test_description,
     ActionInterface,
     ControllerManagerInterface,

@@ -1,6 +1,7 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/nvidia/cu12/lib:${LD_LIBRARY_PATH}
 
 # ROS 2 repository
 RUN apt-get update && apt-get install -y \
@@ -102,7 +103,61 @@ RUN pip3 install --no-cache-dir \
     numpy \
     scipy \
     matplotlib \
-    opencv-python
+    opencv-python \
+    tqdm
+
+# OpenBLAS (required by Jetson PyTorch wheel at runtime)
+RUN apt-get update && apt-get install -y \
+    libopenblas0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# PyTorch (JetPack 6.2 / CUDA 12.6, cp310 aarch64)
+RUN pip3 install --no-cache-dir \
+    --index-url https://pypi.jetson-ai-lab.io/jp6/cu126 \
+    torch==2.11.0 torchvision==0.26.0
+
+# cuDSS runtime (torch 2.11.0 on Jetson links against this; not bundled in the jp6 wheel)
+RUN pip3 install --no-cache-dir nvidia-cudss-cu12
+
+# ninja for faster CUDA extension builds
+RUN pip3 install --no-cache-dir ninja
+
+# GraspNet-baseline: clone, patch for PyTorch 2.x compatibility, build extensions.
+# graspnetAPI intentionally NOT installed — base-level use only needs model
+# inference (top-N grasps by score), not dataset loading/benchmark eval/NMS,
+# which is all graspnetAPI provides. Revisit only if benchmark eval is needed later.
+ENV TORCH_CUDA_ARCH_LIST="8.7"
+RUN git clone https://github.com/graspnet/graspnet-baseline /opt/graspnet-baseline && \
+    sed -i -E 's/\.data<([a-zA-Z_]+)>\(\)/\.data_ptr<\1>()/g' /opt/graspnet-baseline/pointnet2/_ext_src/src/*.cpp && \
+    sed -i 's/from torch._six import container_abcs/import collections.abc as container_abcs/' /opt/graspnet-baseline/dataset/graspnet_dataset.py
+
+RUN cd /opt/graspnet-baseline/pointnet2 && python3 setup.py install
+RUN cd /opt/graspnet-baseline/knn && python3 setup.py install
+
+# graspnetAPI — installed from source with heavy/unavailable deps (open3d, grasp_nms,
+# autolab_core, etc.) stripped out. Only GraspGroup/Grasp classes needed for base-level
+# use (sort, filter, transform grasp poses); dataset loading (GraspNet/GraspNetEval)
+# and 3D visualization deliberately excluded — see grasp.py/__init__.py patches below.
+RUN git config --global http.postBuffer 524288000 && \
+    git config --global http.lowSpeedLimit 0 && \
+    git config --global http.lowSpeedTime 999999 && \
+    git clone https://github.com/graspnet/graspnetAPI /opt/graspnetAPI && \
+    python3 -c "\
+path = '/opt/graspnetAPI/graspnetAPI/__init__.py'; \
+open(path, 'w').write('__author__ = \'mhgou\'\n__version__ = \'1.2.11\'\n\nfrom .grasp import Grasp, GraspGroup, RectGrasp, RectGraspGroup\n')" && \
+    python3 -c "\
+path = '/opt/graspnetAPI/graspnetAPI/grasp.py'; \
+c = open(path).read(); \
+c = c.replace('import open3d as o3d', 'try:\n    import open3d as o3d\nexcept ImportError:\n    o3d = None', 1); \
+open(path, 'w').write(c)" && \
+    python3 -c "\
+path = '/opt/graspnetAPI/graspnetAPI/utils/utils.py'; \
+c = open(path).read(); \
+c = c.replace('import open3d as o3d', 'try:\n    import open3d as o3d\nexcept ImportError:\n    o3d = None', 1); \
+open(path, 'w').write(c)"
+
+RUN pip3 install --no-cache-dir transforms3d
+RUN pip3 install --no-cache-dir --no-build-isolation --no-deps -e /opt/graspnetAPI
 
 # rosdep
 RUN rosdep init || true

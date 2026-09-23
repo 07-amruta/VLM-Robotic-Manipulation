@@ -44,7 +44,7 @@ from ur_msgs.action import ToolContact
 from action_msgs.msg import GoalStatus
 
 sys.path.append(os.path.dirname(__file__))
-from test_common import (  # noqa: E402
+from ros2_ws.src.vendor.Universal_Robots_ROS2_Driver.ur_robot_driver.test.test_common import (  # noqa: E402
     ControllerManagerInterface,
     DashboardInterface,
     IoStatusInterface,
