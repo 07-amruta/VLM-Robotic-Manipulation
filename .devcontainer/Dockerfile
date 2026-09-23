@@ -123,7 +123,6 @@ RUN pip3 install --no-cache-dir nvidia-cudss-cu12
 RUN pip3 install --no-cache-dir ninja
 
 # GraspNet-baseline: clone, patch for PyTorch 2.x compatibility, build extensions.
-# graspnetAPI intentionally NOT installed — base-level use only needs model
 # inference (top-N grasps by score), not dataset loading/benchmark eval/NMS,
 # which is all graspnetAPI provides. Revisit only if benchmark eval is needed later.
 ENV TORCH_CUDA_ARCH_LIST="8.7"
