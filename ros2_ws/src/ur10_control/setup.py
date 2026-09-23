@@ -54,6 +54,7 @@ setup(
             'cartesian_trajectory_control = ur10_control.cartesian_trajectory_control:main',
             'gripper_test = ur10_control.gripper_test:main',
             'ur_gripper_sequence = ur10_control.ur_gripper_sequence:main',
+            'camera_align = ur10_control.camera_align:main',
         ],
     },
 )

@@ -95,7 +95,9 @@ def generate_launch_description():
                 "gz_sim.launch.py",
             )
         ),
-        launch_arguments={"gz_args": "-r empty.sdf"}.items(),
+        launch_arguments={"gz_args": os.path.join(
+            get_package_share_directory("robot_bringup"), "worlds", "pick_and_place.sdf"
+        ) + " -r"}.items(),
     )
 
     # ---------------------------------------------------------
@@ -112,6 +114,18 @@ def generate_launch_description():
         executable="parameter_bridge",
         arguments=[
             "/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock"
+        ],
+        output="screen",
+    )
+
+    camera_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        arguments=[
+            "/wrist_camera/image@sensor_msgs/msg/Image[ignition.msgs.Image",
+            "/wrist_camera/depth_image@sensor_msgs/msg/Image[ignition.msgs.Image",
+            "/wrist_camera/points@sensor_msgs/msg/PointCloud2[ignition.msgs.PointCloudPacked",
+            "/wrist_camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
         ],
         output="screen",
     )
@@ -213,6 +227,8 @@ def generate_launch_description():
         gazebo,
 
         clock_bridge,
+
+        camera_bridge,
 
         robot_state_publisher,
 
