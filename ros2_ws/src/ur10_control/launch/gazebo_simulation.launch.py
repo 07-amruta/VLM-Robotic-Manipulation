@@ -122,12 +122,34 @@ def generate_launch_description():
         package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
-            "/wrist_camera/image@sensor_msgs/msg/Image[ignition.msgs.Image",
-            "/wrist_camera/depth_image@sensor_msgs/msg/Image[ignition.msgs.Image",
-            "/wrist_camera/points@sensor_msgs/msg/PointCloud2[ignition.msgs.PointCloudPacked",
-            "/wrist_camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
+            "/scene_camera/image@sensor_msgs/msg/Image[ignition.msgs.Image",
+            "/scene_camera/depth_image@sensor_msgs/msg/Image[ignition.msgs.Image",
+            "/scene_camera/points@sensor_msgs/msg/PointCloud2[ignition.msgs.PointCloudPacked",
+            "/scene_camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
         ],
         output="screen",
+    )
+
+    scene_camera_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=[
+            "--x", "1.1", "--y", "0", "--z", "1.3",
+            "--roll", "0", "--pitch", "1.02", "--yaw", "3.14159",
+            "--frame-id", "base_link",
+            "--child-frame-id", "scene_camera_link",
+        ],
+    )
+
+    scene_camera_optical_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=[
+            "--x", "0", "--y", "0", "--z", "0",
+            "--roll", "-1.5708", "--pitch", "0", "--yaw", "-1.5708",
+            "--frame-id", "scene_camera_link",
+            "--child-frame-id", "scene_camera_optical",
+        ],
     )
 
     # ---------------------------------------------------------
@@ -225,14 +247,12 @@ def generate_launch_description():
         ),
 
         gazebo,
-
         clock_bridge,
-
         camera_bridge,
-
         robot_state_publisher,
-
         spawn_robot,
+        scene_camera_tf,
+        scene_camera_optical_tf,
 
         # Give Ignition time to load ign_ros2_control and start
         # /controller_manager before spawning controllers into it.
