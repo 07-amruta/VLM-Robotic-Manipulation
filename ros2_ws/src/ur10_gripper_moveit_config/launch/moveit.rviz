@@ -57,7 +57,20 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Best Effort
         Value: /scene_camera/points
-      Value: tru
+      Value: true
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: Best Grasp
+      Shape: Axes
+      Axes Length: 0.1
+      Axes Radius: 0.005
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /grasp_pose
+      Value: true
   Global Options:
     Fixed Frame: world
   Tools:

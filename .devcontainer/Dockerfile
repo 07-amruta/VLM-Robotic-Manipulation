@@ -119,6 +119,11 @@ RUN pip3 install --no-cache-dir \
 # cuDSS runtime (torch 2.11.0 on Jetson links against this; not bundled in the jp6 wheel)
 RUN pip3 install --no-cache-dir nvidia-cudss-cu12
 
+RUN pip3 install --no-cache-dir nvidia-cudss-cu12
+
+# pip's CUDA 12.9 cuBLAS shadows JetPack's 12.6 cuBLAS and breaks cublasCreate on the Orin
+RUN pip3 uninstall -y nvidia-cublas-cu12
+
 # ninja for faster CUDA extension builds
 RUN pip3 install --no-cache-dir ninja
 
@@ -127,6 +132,7 @@ RUN pip3 install --no-cache-dir ninja
 # which is all graspnetAPI provides. Revisit only if benchmark eval is needed later.
 ENV TORCH_CUDA_ARCH_LIST="8.7"
 RUN git clone https://github.com/graspnet/graspnet-baseline /opt/graspnet-baseline && \
+    git -C /opt/graspnet-baseline checkout 280c215129f759ed8649cb4e89fc5dfee55f4f80 && \
     sed -i -E 's/\.data<([a-zA-Z_]+)>\(\)/\.data_ptr<\1>()/g' /opt/graspnet-baseline/pointnet2/_ext_src/src/*.cpp && \
     sed -i 's/from torch._six import container_abcs/import collections.abc as container_abcs/' /opt/graspnet-baseline/dataset/graspnet_dataset.py
 
@@ -141,6 +147,7 @@ RUN git config --global http.postBuffer 524288000 && \
     git config --global http.lowSpeedLimit 0 && \
     git config --global http.lowSpeedTime 999999 && \
     git clone https://github.com/graspnet/graspnetAPI /opt/graspnetAPI && \
+    git -C /opt/graspnetAPI checkout eb57dd2092d8dbe05312a29c3d0c22f3226efbfc && \
     python3 -c "\
 path = '/opt/graspnetAPI/graspnetAPI/__init__.py'; \
 open(path, 'w').write('__author__ = \'mhgou\'\n__version__ = \'1.2.11\'\n\nfrom .grasp import Grasp, GraspGroup, RectGrasp, RectGraspGroup\n')" && \
@@ -175,3 +182,5 @@ RUN mkdir -p /root/.bash_history_dir && \
 
 # Default working directory
 WORKDIR /workspaces
+
+ENV GRASPNET_ROOT=/opt/graspnet-baseline

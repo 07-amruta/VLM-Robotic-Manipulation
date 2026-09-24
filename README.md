@@ -183,6 +183,13 @@ ros2 launch ur_calibration calibration_correction.launch.py robot_ip:=192.168.1.
 source install/setup.bash
 ```
 
+* For Triggering Scene Snapshot
+
+```bash
+ros2 service call /capture_scene std_srvs/srv/Trigger
+```
+
+
 ## License
 
 This project is licensed under the **MIT License**.
