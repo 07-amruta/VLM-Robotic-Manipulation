@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import rclpy
 import torch
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from graspnetAPI import GraspGroup
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -41,6 +41,32 @@ def lookup_matrix(buffer, target_frame, source_frame):
     m[:3, 3] = [t.x, t.y, t.z]
     return m
 
+def make_pose(position, rotation):
+    pose = Pose()
+    pose.position.x, pose.position.y, pose.position.z = map(float, position)
+    (pose.orientation.x, pose.orientation.y,
+     pose.orientation.z, pose.orientation.w) = map(
+        float, Rotation.from_matrix(rotation).as_quat())
+    return pose
+
+
+def select_candidates(positions, rotations, scores, limit, min_dist, min_angle):
+    """Best-first selection that drops grasps close to one already kept."""
+    kept = []
+    for i in np.argsort(-scores):
+        duplicate = False
+        for j in kept:
+            cos = np.clip((np.trace(rotations[i].T @ rotations[j]) - 1.0) / 2.0, -1.0, 1.0)
+            if (np.linalg.norm(positions[i] - positions[j]) < min_dist
+                    and np.arccos(cos) < min_angle):
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(int(i))
+            if len(kept) == limit:
+                break
+    return kept
+
 
 class GraspProposer(Node):
     """Runs GraspNet on the cropped scene cloud and publishes the best grasp in the cloud's frame."""
@@ -55,7 +81,10 @@ class GraspProposer(Node):
         self.declare_parameter('optical_frame', 'scene_camera_optical')
         self.declare_parameter('num_point', 20000)
         # Reject grasps whose approach axis points upward, i.e. coming from below the table.
-        self.declare_parameter('max_approach_z', 0.0)
+        self.declare_parameter('max_approach_z', -0.7)
+        self.declare_parameter('num_candidates', 30)
+        self.declare_parameter('nms_translation', 0.03)
+        self.declare_parameter('nms_rotation', 0.5)
 
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         self.net, self.pred_decode = load_graspnet(
@@ -74,6 +103,7 @@ class GraspProposer(Node):
         )
         self.create_subscription(PointCloud2, 'scene_points', self.on_cloud, latched)
         self.pose_pub = self.create_publisher(PoseStamped, 'grasp_pose', latched)
+        self.candidates_pub = self.create_publisher(PoseArray, 'grasp_candidates', latched)
 
     def on_cloud(self, msg):
         # Cloud format produced by scene_snapshot: xyz float32
@@ -116,19 +146,28 @@ class GraspProposer(Node):
         if not keep.any():
             self.get_logger().warn('No grasp passed the approach filter')
             return
-        best = int(np.argmax(np.where(keep, grasps.scores, -np.inf)))
+        valid = np.flatnonzero(keep)
+        chosen = valid[select_candidates(
+            positions[valid], rotations[valid], grasps.scores[valid],
+            self.get_parameter('num_candidates').value,
+            self.get_parameter('nms_translation').value,
+            self.get_parameter('nms_rotation').value)]
 
+        candidates = PoseArray()
+        candidates.header.stamp = msg.header.stamp
+        candidates.header.frame_id = msg.header.frame_id
+        candidates.poses = [make_pose(positions[i], rotations[i]) for i in chosen]
+        self.candidates_pub.publish(candidates)
+
+        best = int(chosen[0])
         pose = PoseStamped()
-        pose.header.stamp = msg.header.stamp
-        pose.header.frame_id = msg.header.frame_id
-        pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = map(float, positions[best])
-        (pose.pose.orientation.x, pose.pose.orientation.y,
-         pose.pose.orientation.z, pose.pose.orientation.w) = map(
-            float, Rotation.from_matrix(rotations[best]).as_quat())
+        pose.header = candidates.header
+        pose.pose = candidates.poses[0]
         self.pose_pub.publish(pose)
         self.get_logger().info(
             f'Best grasp: score {grasps.scores[best]:.3f}, '
-            f'position {np.round(positions[best], 3).tolist()}')
+            f'position {np.round(positions[best], 3).tolist()}, '
+            f'{len(chosen)} candidates')
 
 
 def main():

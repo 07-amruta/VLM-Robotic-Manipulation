@@ -27,6 +27,7 @@ setup(
             'scene_snapshot = grasp_pick_and_place.scene_snapshot:main',
             'grasp_proposer = grasp_pick_and_place.grasp_proposer:main',
             'pick_executor = grasp_pick_and_place.pick_executor:main',
+            'run_pick = grasp_pick_and_place.run_pick:main',
         ],
     },
 )
