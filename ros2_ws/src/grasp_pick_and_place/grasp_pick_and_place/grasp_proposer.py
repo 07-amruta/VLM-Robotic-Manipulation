@@ -4,14 +4,14 @@ import sys
 import numpy as np
 import rclpy
 import torch
-from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+from sensor_msgs.msg import PointCloud2
+from geometry_msgs.msg import PoseArray, PoseStamped
 from graspnetAPI import GraspGroup
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from rclpy.time import Time
-from scipy.spatial.transform import Rotation
-from sensor_msgs.msg import PointCloud2
 from tf2_ros import Buffer, TransformException, TransformListener
+
+from grasp_pick_and_place.transform_utils import lookup_matrix, matrix_to_pose
 
 
 def load_graspnet(root, checkpoint_path, device):
@@ -33,21 +33,11 @@ def load_graspnet(root, checkpoint_path, device):
     return net, pred_decode
 
 
-def lookup_matrix(buffer, target_frame, source_frame):
-    tf = buffer.lookup_transform(target_frame, source_frame, Time())
-    q, t = tf.transform.rotation, tf.transform.translation
-    m = np.eye(4)
-    m[:3, :3] = Rotation.from_quat([q.x, q.y, q.z, q.w]).as_matrix()
-    m[:3, 3] = [t.x, t.y, t.z]
-    return m
-
-def make_pose(position, rotation):
-    pose = Pose()
-    pose.position.x, pose.position.y, pose.position.z = map(float, position)
-    (pose.orientation.x, pose.orientation.y,
-     pose.orientation.z, pose.orientation.w) = map(
-        float, Rotation.from_matrix(rotation).as_quat())
-    return pose
+def grasp_pose(position, rotation):
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation
+    matrix[:3, 3] = position
+    return matrix_to_pose(matrix)
 
 
 def select_candidates(positions, rotations, scores, limit, min_dist, min_angle):
@@ -69,7 +59,10 @@ def select_candidates(positions, rotations, scores, limit, min_dist, min_angle):
 
 
 class GraspProposer(Node):
-    """Runs GraspNet on the cropped scene cloud and publishes the best grasp in the cloud's frame."""
+    """Runs GraspNet on the cropped scene cloud and publishes ranked grasps in the cloud's frame.
+
+    GraspNet frame: x = approach, y = jaw closing axis. The executor adapts this to the hand.
+    """
 
     def __init__(self):
         super().__init__('grasp_proposer')
@@ -80,8 +73,10 @@ class GraspProposer(Node):
             '/workspaces/VLM-Robotic-Manipulation/checkpoints/graspnet/checkpoint-rs.tar')
         self.declare_parameter('optical_frame', 'scene_camera_optical')
         self.declare_parameter('num_point', 20000)
-        # Reject grasps whose approach axis points upward, i.e. coming from below the table.
+        # Drop grasps whose approach axis is not steep enough (z component of the approach).
         self.declare_parameter('max_approach_z', -0.7)
+        # Drop grasps centred lower than this above the object's lowest point (the table).
+        self.declare_parameter('min_grasp_height', 0.02)
         self.declare_parameter('num_candidates', 30)
         self.declare_parameter('nms_translation', 0.03)
         self.declare_parameter('nms_rotation', 0.5)
@@ -129,7 +124,8 @@ class GraspProposer(Node):
         if count >= n:
             idx = np.random.choice(count, n, replace=False)
         else:
-            idx = np.concatenate([np.arange(count), np.random.choice(count, n - count, replace=True)])
+            idx = np.concatenate(
+                [np.arange(count), np.random.choice(count, n - count, replace=True)])
         sampled = torch.from_numpy(points_opt[idx][np.newaxis].astype(np.float32)).to(self.device)
 
         with torch.no_grad():
@@ -143,8 +139,9 @@ class GraspProposer(Node):
         positions = grasps.translations @ rot.T + base_from_optical[:3, 3]
 
         keep = rotations[:, 2, 0] <= self.get_parameter('max_approach_z').value
+        keep &= positions[:, 2] >= points[:, 2].min() + self.get_parameter('min_grasp_height').value
         if not keep.any():
-            self.get_logger().warn('No grasp passed the approach filter')
+            self.get_logger().warn('No grasp passed the approach/height filter')
             return
         valid = np.flatnonzero(keep)
         chosen = valid[select_candidates(
@@ -156,7 +153,7 @@ class GraspProposer(Node):
         candidates = PoseArray()
         candidates.header.stamp = msg.header.stamp
         candidates.header.frame_id = msg.header.frame_id
-        candidates.poses = [make_pose(positions[i], rotations[i]) for i in chosen]
+        candidates.poses = [grasp_pose(positions[i], rotations[i]) for i in chosen]
         self.candidates_pub.publish(candidates)
 
         best = int(chosen[0])

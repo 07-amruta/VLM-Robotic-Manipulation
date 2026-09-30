@@ -1,18 +1,17 @@
 import sys
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 
 import numpy as np
 import rclpy
-from collections import Counter
 from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory
 from geometry_msgs.msg import Pose, PoseArray
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup
 from moveit_msgs.msg import (
-    AllowedCollisionEntry, AllowedCollisionMatrix, AttachedCollisionObject,
-    CollisionObject, Constraints, JointConstraint, PlanningScene,
-    PlanningSceneComponents, RobotState)
+    AllowedCollisionEntry, AllowedCollisionMatrix, CollisionObject, Constraints,
+    JointConstraint, PlanningScene, PlanningSceneComponents, RobotState)
 from moveit_msgs.srv import (
     ApplyPlanningScene, GetCartesianPath, GetPlanningScene, GetPositionIK, GetStateValidity)
 from rcl_interfaces.srv import GetParameters
@@ -20,6 +19,7 @@ from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
+from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import JointState, PointCloud2
 from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, TransformException, TransformListener
@@ -38,13 +38,52 @@ MOVEIT_SUCCESS = 1
 OBJECT_ID = 'target_object'
 
 
+def fit_box(points, margin):
+    """Yaw-aligned box around a cloud: minimum-area rectangle in xy, full extent in z.
+
+    Returns (centre, size, yaw). The bottom face sits on the cloud's lowest point (the table).
+    """
+    xy = points[:, :2]
+    best = None
+    for yaw in np.deg2rad(np.arange(0.0, 90.0, 1.0)):
+        c, s = np.cos(yaw), np.sin(yaw)
+        local = xy @ np.array([[c, -s], [s, c]])  # coordinates along (c, s) and (-s, c)
+        low, high = local.min(axis=0), local.max(axis=0)
+        area = np.prod(high - low)
+        if best is None or area < best[0]:
+            best = (area, yaw, low, high)
+    _, yaw, low, high = best
+    c, s = np.cos(yaw), np.sin(yaw)
+    centre_xy = np.array([[c, -s], [s, c]]) @ ((low + high) / 2.0)
+    z_low, z_high = points[:, 2].min(), points[:, 2].max()
+    centre = np.array([centre_xy[0], centre_xy[1], (z_low + z_high + margin) / 2.0])
+    size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
+    return centre, size, yaw
+
+
+def is_similar(a, b, max_dist=0.01, max_angle=0.1):
+    cos = np.clip((np.trace(a[:3, :3].T @ b[:3, :3]) - 1.0) / 2.0, -1.0, 1.0)
+    return np.linalg.norm(a[:3, 3] - b[:3, 3]) < max_dist and np.arccos(cos) < max_angle
+
+def longest_run(flags):
+    """(first, last) indices of the longest run of True values, or None."""
+    best, start = None, None
+    for k, ok in enumerate(list(flags) + [False]):
+        if ok and start is None:
+            start = k
+        elif not ok and start is not None:
+            if best is None or k - 1 - start > best[1] - best[0]:
+                best = (start, k - 1)
+            start = None
+    return best
+
 class PickExecutor(Node):
     """Picks one object: open, pre-grasp, straight approach, close, straight lift, up.
 
-    Each candidate grasp is checked end to end (IK, pre-grasp plan, straight-line approach,
-    lift and up) before anything moves. The object is a collision object in MoveIt's scene;
-    gripper-object contact is only allowed for the last `contact_distance` of the approach
-    and after that the object is attached to the gripper.
+    Every proposed grasp is first turned into a hand pose that envelopes the object (closing
+    axis on a box face normal, hand centred on the object). A hand pose is only used if the
+    open hand touches nothing there, and if IK, the pre-grasp plan, the straight approach,
+    the lift and the up move are all feasible. Nothing moves until a pose passes every check.
     """
 
     def __init__(self):
@@ -53,9 +92,7 @@ class PickExecutor(Node):
         self.declare_parameter('group_name', 'ur_manipulator')
         self.declare_parameter('ik_link', 'tool0')
         self.declare_parameter('tcp_frame', 'gripper_tool0')
-        self.declare_parameter('clearance_step', 0.02)
-        self.declare_parameter('max_clearance', 0.30)
-        self.declare_parameter('clearance_margin', 0.03)
+        self.declare_parameter('approach_margin', 0.05)
         self.declare_parameter('lift_height', 0.15)
         self.declare_parameter('up_joints', [0.0, -1.57, 0.0, -1.57, 0.0, 0.0])
         self.declare_parameter('velocity_scaling', 0.4)
@@ -66,8 +103,6 @@ class PickExecutor(Node):
         self.declare_parameter('cartesian_step', 0.01)
         self.declare_parameter('cartesian_joint_speed', 0.3)
         self.declare_parameter('max_joint_step', 0.3)
-        self.declare_parameter('model_object', True)
-        self.declare_parameter('object_radius', 0.10)
         self.declare_parameter('object_margin', 0.01)
         self.declare_parameter('gripper_link_prefix', 'gripper_')
         self.declare_parameter('gripper_links', '')  # comma-separated override
@@ -77,12 +112,21 @@ class PickExecutor(Node):
         self.declare_parameter('close_period', 0.1)
         self.declare_parameter('close_limit', [1.2, 1.2, 1.2])
         self.declare_parameter('contact_lag', 0.08)
-        self.declare_parameter('squeeze_margin', 0.02)
+        self.declare_parameter('squeeze_margin', 0.01)
         self.declare_parameter('close_timeout', 15.0)
         self.declare_parameter('motion_eps', 0.01)
         self.declare_parameter('stall_count', 2)
+        self.declare_parameter(
+            'hand_pair_frames', ['gripper_finger_1_link_3', 'gripper_finger_2_link_3'])
+        self.declare_parameter('hand_opposing_frame', 'gripper_finger_middle_link_3')
+        self.declare_parameter('hand_palm_frame', 'gripper_palm')
+        self.declare_parameter('search_step', 0.005)
+        self.declare_parameter('search_reach', 0.04)
+        self.declare_parameter('retreat_step', 0.01)
+        self.declare_parameter('max_retreat', 0.03)
+        self.declare_parameter('min_free_width', 0.01)
+        self.declare_parameter('fallback_depth', 0.02)
 
-        self.model_object = self.get_parameter('model_object').value
         self.candidates = None
         self.scene_points = None
         self.scene_frame = None
@@ -91,6 +135,14 @@ class PickExecutor(Node):
         self.joint_map = {}
         self.gripper_links = []
         self.rejections = Counter()
+
+        self.frame_id = None
+        self.tcp_to_link = None
+        self.hand_axis = None      # closing axis of the open hand, unit, tcp frame
+        self.hand_centre = None    # centre of the closing region of the open hand, tcp frame
+        self.object_centre = None
+        self.object_size = None
+        self.box_axes = None       # +-x and +-y of the object box, in the scene frame
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -194,29 +246,42 @@ class PickExecutor(Node):
             raise RuntimeError(f'No links start with "{prefix}"; set the gripper_links parameter')
         return found
 
-    def object_box(self, center):
-        """Axis-aligned box around the cloud points near `center`, or None."""
-        radius = self.get_parameter('object_radius').value
-        margin = self.get_parameter('object_margin').value
-        near = np.linalg.norm(self.scene_points[:, :2] - center[:2], axis=1) < radius
-        points = self.scene_points[near]
-        if points.shape[0] < 20:
-            return None
-        low = points.min(axis=0) - margin
-        high = points.max(axis=0) + margin
-        low[2] = points[:, 2].min()  # keep the bottom on the table
-        return low, high
+    def remove_object(self):
+        """Clears a target_object left over from an earlier run."""
+        request = GetPlanningScene.Request()
+        request.components.components = PlanningSceneComponents.WORLD_OBJECT_NAMES
+        current = self.call_service(self.get_scene_client, request).scene
+        if any(o.id == OBJECT_ID for o in current.world.collision_objects):
+            remove = CollisionObject()
+            remove.id = OBJECT_ID
+            remove.operation = CollisionObject.REMOVE
+            scene = PlanningScene()
+            scene.is_diff = True
+            scene.world.collision_objects = [remove]
+            self.apply_scene(scene)
 
-    def add_object(self, low, high):
+    def add_object(self):
+        """Fits a yaw-aligned box to the scene cloud and adds it to MoveIt's scene."""
+        points = self.scene_points.astype(float)
+        if points.shape[0] < 20:
+            raise RuntimeError('Too few cloud points to model the object')
+        centre, size, yaw = fit_box(points, self.get_parameter('object_margin').value)
+        self.object_centre, self.object_size = centre, size
+        ex = np.array([np.cos(yaw), np.sin(yaw), 0.0])
+        ey = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
+        self.box_axes = (ex, -ex, ey, -ey)
+
         obj = CollisionObject()
         obj.header.frame_id = self.scene_frame
         obj.id = OBJECT_ID
         primitive = SolidPrimitive()
         primitive.type = SolidPrimitive.BOX
-        primitive.dimensions = [float(v) for v in (high - low)]
+        primitive.dimensions = [float(v) for v in size]
         pose = Pose()
-        pose.position.x, pose.position.y, pose.position.z = map(float, (low + high) / 2.0)
-        pose.orientation.w = 1.0
+        pose.position.x, pose.position.y, pose.position.z = map(float, centre)
+        qx, qy, qz, qw = Rotation.from_euler('z', yaw).as_quat()
+        pose.orientation.x, pose.orientation.y = float(qx), float(qy)
+        pose.orientation.z, pose.orientation.w = float(qz), float(qw)
         obj.primitives = [primitive]
         obj.primitive_poses = [pose]
         obj.operation = CollisionObject.ADD
@@ -224,40 +289,12 @@ class PickExecutor(Node):
         scene.is_diff = True
         scene.world.collision_objects = [obj]
         self.apply_scene(scene)
-
-    def remove_object(self):
-        """Clears a target_object left over from an earlier run (world or attached)."""
-        request = GetPlanningScene.Request()
-        request.components.components = (
-            PlanningSceneComponents.WORLD_OBJECT_NAMES
-            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS)
-        current = self.call_service(self.get_scene_client, request).scene
-
-        scene = PlanningScene()
-        scene.is_diff = True
-
-        if any(a.object.id == OBJECT_ID
-               for a in current.robot_state.attached_collision_objects):
-            detach = AttachedCollisionObject()
-            detach.link_name = self.get_parameter('ik_link').value
-            detach.object.id = OBJECT_ID
-            detach.object.operation = CollisionObject.REMOVE
-            scene.robot_state.is_diff = True
-            scene.robot_state.attached_collision_objects = [detach]
-
-        if any(o.id == OBJECT_ID for o in current.world.collision_objects):
-            remove = CollisionObject()
-            remove.id = OBJECT_ID
-            remove.operation = CollisionObject.REMOVE
-            scene.world.collision_objects = [remove]
-
-        if scene.robot_state.attached_collision_objects or scene.world.collision_objects:
-            self.apply_scene(scene)
+        self.get_logger().info(
+            f'Object box size {np.round(size, 3).tolist()} centre {np.round(centre, 3).tolist()} '
+            f'yaw {np.rad2deg(yaw):.0f} deg')
 
     def set_contact_allowed(self, allowed):
         """Allow or forbid gripper-object contact in MoveIt's collision matrix."""
-        if not self.model_object:
-            return
         request = GetPlanningScene.Request()
         request.components.components = PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
         acm = self.call_service(
@@ -285,23 +322,9 @@ class PickExecutor(Node):
             default_entry_values=list(acm.default_entry_values))
         self.apply_scene(scene)
 
-    def attach_object(self):
-        if not self.model_object:
-            return
-        attached = AttachedCollisionObject()
-        attached.link_name = self.get_parameter('ik_link').value
-        attached.object.id = OBJECT_ID
-        attached.object.operation = CollisionObject.ADD
-        attached.touch_links = list(self.gripper_links) + [attached.link_name]
-        scene = PlanningScene()
-        scene.is_diff = True
-        scene.robot_state.is_diff = True
-        scene.robot_state.attached_collision_objects = [attached]
-        self.apply_scene(scene)
-
     # ---------- IK and motion ----------
 
-    def solve_ik(self, pose_matrix, frame_id, seed, avoid_collisions=True):
+    def solve_ik(self, tcp_pose, seed, avoid_collisions=True):
         request = GetPositionIK.Request()
         ik = request.ik_request
         ik.group_name = self.get_parameter('group_name').value
@@ -311,8 +334,8 @@ class PickExecutor(Node):
         ik.timeout = Duration(sec=int(timeout), nanosec=int((timeout % 1) * 1e9))
         ik.robot_state.joint_state = JointState(
             name=ARM_JOINTS, position=[float(p) for p in seed])
-        ik.pose_stamped.header.frame_id = frame_id
-        ik.pose_stamped.pose = matrix_to_pose(pose_matrix)
+        ik.pose_stamped.header.frame_id = self.frame_id
+        ik.pose_stamped.pose = matrix_to_pose(tcp_pose @ self.tcp_to_link)
 
         response = self.call_service(self.ik_client, request)
         if response.error_code.val != MOVEIT_SUCCESS:
@@ -321,7 +344,7 @@ class PickExecutor(Node):
         solved = dict(zip(response.solution.joint_state.name,
                           response.solution.joint_state.position))
         joints = [solved[n] for n in ARM_JOINTS]
-        # IK may return an angle a full turn away from the seed; use the equivalent one nearest it
+        # Use the angle equivalent (mod a full turn) that is nearest the current joints
         return [c + (q - c + np.pi) % (2 * np.pi) - np.pi
                 for q, c in zip(joints, self.joint_positions)]
 
@@ -380,16 +403,16 @@ class PickExecutor(Node):
             point.velocities = []
             point.accelerations = []
 
-    def plan_line(self, start_joints, target, frame_id, tcp_to_link):
-        """Straight-line tool path to `target`. Returns (trajectory, end_joints) or None."""
+    def plan_line(self, start_joints, target):
+        """Straight-line tool path to the tcp pose `target`. Returns (trajectory, end) or None."""
         request = GetCartesianPath.Request()
-        request.header.frame_id = frame_id
+        request.header.frame_id = self.frame_id
         request.group_name = self.get_parameter('group_name').value
         request.link_name = self.get_parameter('ik_link').value
         request.start_state = RobotState()
         request.start_state.joint_state = JointState(
             name=ARM_JOINTS, position=[float(p) for p in start_joints])
-        request.waypoints = [matrix_to_pose(target @ tcp_to_link)]
+        request.waypoints = [matrix_to_pose(target @ self.tcp_to_link)]
         request.max_step = self.get_parameter('cartesian_step').value
         request.jump_threshold = 0.0
         request.avoid_collisions = True
@@ -414,11 +437,6 @@ class PickExecutor(Node):
         names = trajectory.joint_trajectory.joint_names
         end = [points[-1].positions[names.index(n)] for n in ARM_JOINTS]
         self.time_parameterize(trajectory)
-
-        self.get_logger().warn(
-            f'Straight-line path only {fraction:.0%} feasible '
-            f'(code {response.error_code.val})')
-        
         return trajectory, end
 
     def execute_trajectory(self, trajectory):
@@ -431,25 +449,26 @@ class PickExecutor(Node):
             return False
         return True
 
-    def line_move(self, target, frame_id, tcp_to_link, label):
+    def line_move(self, target, label):
         """Straight-line move from the actual current state; raises if it fails."""
         self.spin_for(0.3)  # let /joint_states settle before planning from the current state
-        plan = self.plan_line(self.joint_positions, target, frame_id, tcp_to_link)
+        plan = self.plan_line(self.joint_positions, target)
         if plan is None or not self.execute_trajectory(plan[0]):
             raise RuntimeError(f'{label} failed')
 
     # ---------- gripper ----------
 
-    def move_gripper(self, positions):
-        duration = self.get_parameter('gripper_duration').value
+    def finger_goal(self, positions, duration):
         point = JointTrajectoryPoint()
         point.positions = [float(p) for p in positions]
         point.time_from_start = Duration(sec=int(duration), nanosec=int((duration % 1) * 1e9))
-
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = GRIPPER_JOINTS
         goal.trajectory.points = [point]
+        return goal
 
+    def move_gripper(self, positions):
+        goal = self.finger_goal(positions, self.get_parameter('gripper_duration').value)
         result = self.run_goal(self.gripper_client, goal)
         if result is None:
             self.get_logger().error('Gripper goal rejected')
@@ -457,15 +476,6 @@ class PickExecutor(Node):
         # Fingers stalling on the object can report a tolerance error; that is expected when closing
         self.get_logger().info(f'Gripper finished (error_code {result.error_code})')
         return True
-
-    def send_finger_targets(self, positions, duration):
-        point = JointTrajectoryPoint()
-        point.positions = [float(p) for p in positions]
-        point.time_from_start = Duration(sec=int(duration), nanosec=int((duration % 1) * 1e9))
-        goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = GRIPPER_JOINTS
-        goal.trajectory.points = [point]
-        self.gripper_client.send_goal_async(goal)
 
     def close_until_contact(self):
         step = self.get_parameter('close_step').value
@@ -490,8 +500,7 @@ class PickExecutor(Node):
                 still[i] = still[i] + 1 if abs(measured - previous[i]) < eps else 0
                 previous[i] = measured
                 has_moved = measured - start[i] > step
-                blocked = (
-                    has_moved and still[i] >= needed and target[i] - measured > lag)
+                blocked = has_moved and still[i] >= needed and target[i] - measured > lag
                 if blocked:
                     stalled[i] = True
                     target[i] = measured + margin
@@ -502,49 +511,162 @@ class PickExecutor(Node):
                 else:
                     target[i] = min(target[i] + step, limits[i])
 
-            self.get_logger().info(
-                f'target={[round(t, 3) for t in target]} '
-                f'measured={[round(m, 3) for m in self.finger_positions]}')
-
-            self.send_finger_targets(target, period)
+            self.gripper_client.send_goal_async(self.finger_goal(target, period))
             self.spin_for(period)
             if all(stalled):
                 return True
         self.get_logger().error('Gripper close timed out')
         return False
 
-    # ---------- one candidate: check, then execute ----------
+    # ---------- hand and grasp geometry ----------
 
-    def targets(self, grasp, back):
+    def hand_geometry(self):
+        """Closing axis and closing centre of the open hand in the tcp frame, from TF."""
+        tcp = self.get_parameter('tcp_frame').value
+
+        def position(frame):
+            return lookup_matrix(self.tf_buffer, tcp, frame)[:3, 3]
+
+        palm = position(self.get_parameter('hand_palm_frame').value)
+        if palm[0] >= 0.0:
+            raise RuntimeError(
+                f'Palm is at x={palm[0]:.3f} in the tcp frame; the grasp frame assumes x points '
+                'from the palm toward the fingertips')
+        pair = np.mean([position(f) for f in self.get_parameter('hand_pair_frames').value],
+                       axis=0)
+        opposing = position(self.get_parameter('hand_opposing_frame').value)
+        centre = (pair + opposing) / 2.0
+        direction = pair - opposing
+        centre[0] = direction[0] = 0.0  # x is the approach axis of the grasp frame
+        gap = float(np.linalg.norm(direction))
+        self.hand_axis = direction / gap
+        self.hand_centre = centre
+        self.get_logger().info(
+            f'Hand closing axis {np.round(self.hand_axis, 3).tolist()} '
+            f'centre {np.round(self.hand_centre, 3).tolist()} gap {gap:.3f} m, '
+            f'palm x {palm[0]:.3f} (tcp frame)')
+
+    def hand_poses(self, proposal):
+        """Turns a proposed grasp into hand poses that envelope the object.
+
+        The hand's closing axis is put on the proposal's jaw axis, then snapped to the nearest
+        box face normal, and the hand's closing centre is moved onto the object's centre
+        across the approach. Approach axis and depth stay as proposed. Both 180-degree wrist
+        variants are returned.
+        """
+        approach = proposal[:3, 0]
+        tilt = -np.arctan2(self.hand_axis[2], self.hand_axis[1])
+        rot = proposal[:3, :3] @ Rotation.from_rotvec([tilt, 0.0, 0.0]).as_matrix()
+        closing = rot @ self.hand_axis
+
+        turns = []
+        for axis in self.box_axes:
+            target = axis - approach * (axis @ approach)
+            target /= np.linalg.norm(target)
+            turns.append(np.arctan2(approach @ np.cross(closing, target), closing @ target))
+        snap = min(turns, key=abs)
+
+        offset = self.object_centre - proposal[:3, 3]
+        offset -= approach * (offset @ approach)
+        poses = []
+        for extra in (0.0, np.pi):
+            r = Rotation.from_rotvec(approach * (snap + extra)).as_matrix() @ rot
+            pose = np.eye(4)
+            pose[:3, :3] = r
+            pose[:3, 3] = proposal[:3, 3] + offset - r @ self.hand_centre
+            poses.append(pose)
+        return poses
+
+    def top_down_grasp(self):
+        """Fallback proposal: straight down onto the object, closing across its narrower side."""
+        ex, _, ey, _ = self.box_axes
+        closing = ex if self.object_size[0] <= self.object_size[1] else ey
+        approach = np.array([0.0, 0.0, -1.0])
+        top = self.object_centre[2] + self.object_size[2] / 2.0
+        grasp = np.eye(4)
+        grasp[:3, :3] = np.column_stack([approach, closing, np.cross(approach, closing)])
+        grasp[:3, 3] = [
+            self.object_centre[0], self.object_centre[1],
+            top - self.get_parameter('fallback_depth').value]
+        return grasp
+
+    def object_contacts(self, joints):
+        """Names of the robot bodies touching the object in this arm configuration."""
+        positions = dict(self.joint_map)
+        positions.update(zip(ARM_JOINTS, (float(q) for q in joints)))
+        request = GetStateValidity.Request()
+        request.group_name = self.get_parameter('group_name').value
+        request.robot_state.joint_state = JointState(
+            name=list(positions), position=list(positions.values()))
+        response = self.call_service(self.validity_client, request)
+        return sorted({c.contact_body_2 if c.contact_body_1 == OBJECT_ID else c.contact_body_1
+                       for c in response.contacts
+                       if OBJECT_ID in (c.contact_body_1, c.contact_body_2)})
+
+    def find_envelope(self, grasp):
+        """Slides the open hand across its closing axis, backing off along the approach if
+        needed, to where it touches nothing. Returns (pose, free_width, retreat) or None."""
+        step = self.get_parameter('search_step').value
+        reach = self.get_parameter('search_reach').value
+        offsets = np.arange(-reach, reach + 1e-9, step)
+        retreats = np.arange(0.0, self.get_parameter('max_retreat').value + 1e-9,
+                             self.get_parameter('retreat_step').value)
+        closing = grasp[:3, :3] @ self.hand_axis
         approach = grasp[:3, 0]
-        margin = self.get_parameter('clearance_margin').value
+        seed = list(self.joint_positions)
+        closest = None
+        for retreat in retreats:
+            free = []
+            for offset in offsets:
+                moved = grasp.copy()
+                moved[:3, 3] += closing * offset - approach * retreat
+                joints = self.solve_ik(moved, seed, avoid_collisions=False)
+                if joints is None:
+                    free.append(False)
+                    continue
+                contacts = self.object_contacts(joints)
+                free.append(not contacts)
+                if closest is None or len(contacts) < len(closest[0]):
+                    closest = (contacts, offset, retreat)
+            run = longest_run(free)
+            if run is not None and (run[1] - run[0] + 1) * step >= self.get_parameter(
+                    'min_free_width').value:
+                moved = grasp.copy()
+                moved[:3, 3] += closing * (offsets[run[0]] + offsets[run[1]]) / 2.0 \
+                    - approach * retreat
+                return moved, (run[1] - run[0] + 1) * step, retreat
+        if closest is None:
+            self.get_logger().info('Closest miss: no reachable hand position')
+        else:
+            contacts, offset, retreat = closest
+            self.get_logger().info(
+                f'Closest miss: {contacts} at offset {offset:+.3f} m, retreat {retreat:.3f} m')
+        return None
 
-        def shifted(offset):
-            m = grasp.copy()
-            m[:3, 3] += offset
-            return m
+    # ---------- one hand pose: check, then execute ----------
 
-        return {
-            'pre': shifted(-(back + margin) * approach),
-            'standoff': shifted(-back * approach),
-            'grasp': grasp,
-            'lift': shifted(np.array([0.0, 0.0, self.get_parameter('lift_height').value])),
-        }
+    def targets(self, grasp):
+        # Start outside the object's bounding sphere, whatever its size
+        back = 0.5 * np.linalg.norm(self.object_size) + self.get_parameter('approach_margin').value
+        pre, lift = grasp.copy(), grasp.copy()
+        pre[:3, 3] -= back * grasp[:3, 0]
+        lift[:3, 3] += [0.0, 0.0, self.get_parameter('lift_height').value]
+        return {'pre': pre, 'grasp': grasp, 'lift': lift}
 
     def reject(self, reason):
         self.rejections[reason] += 1
         self.get_logger().warn(f'Rejected: {reason}')
         return None
 
-    def pre_solutions(self, target, frame_id, tcp_to_link):
-        """Distinct IK solutions for `target`, nearest to the current joints first."""
+    def pre_solutions(self, target):
+        """Distinct collision-free IK solutions for `target`, nearest the current joints first."""
         start = np.array(self.joint_positions)
         rng = np.random.default_rng(0)
         seeds = [start] + [rng.uniform(-np.pi, np.pi, len(ARM_JOINTS))
                            for _ in range(self.get_parameter('ik_seeds').value)]
         found = []
         for seed in seeds:
-            joints = self.solve_ik(target @ tcp_to_link, frame_id, seed)
+            joints = self.solve_ik(target, seed)
             if joints is None:
                 continue
             joints = np.array(joints)
@@ -553,21 +675,18 @@ class PickExecutor(Node):
         found.sort(key=lambda q: np.abs(q - start)[:5].max())
         return found
 
-    def check_branch(self, joints, goals, frame_id, tcp_to_link):
+    def check_branch(self, joints, goals):
         """Checks the whole pick for one pre-grasp solution. Returns (plan, reason)."""
         start = list(self.joint_positions)
         up_joints = self.get_parameter('up_joints').value
 
         self.set_contact_allowed(False)
-        approach = self.plan_line(joints, goals['standoff'], frame_id, tcp_to_link)
+        approach = self.plan_line(joints, goals['grasp'])
         if approach is None:
             return None, 'straight approach is blocked'
 
-        self.set_contact_allowed(True)
-        final = self.plan_line(approach[1], goals['grasp'], frame_id, tcp_to_link)
-        if final is None:
-            return None, 'final approach is blocked'
-        lift = self.plan_line(final[1], goals['lift'], frame_id, tcp_to_link)
+        self.set_contact_allowed(True)  # once closed, the fingers touch the object by design
+        lift = self.plan_line(approach[1], goals['lift'])
         if lift is None:
             return None, 'straight lift is blocked'
         if self.plan_to_joints(lift[1], up_joints) is None:
@@ -580,28 +699,30 @@ class PickExecutor(Node):
             return None, 'no collision-free path to the pre-grasp'
         return {'goals': goals, 'pre_trajectory': pre_trajectory}, None
 
-    def screen(self, pose, frame_id, tcp_to_link):
-        """Checks one candidate end to end without moving. Returns a plan dict or None."""
-        grasp = pose_to_matrix(pose)
-        back, reason = self.clearance(grasp, frame_id, tcp_to_link)
-        if back is None:
-            return self.reject(reason)
-        self.get_logger().info(f'Open hand clears the object {back:.2f} m back')
-        goals = self.targets(grasp, back)
+    def screen(self, grasp):
+        """Checks one hand pose end to end without moving. Returns a plan dict or None."""
         self.set_contact_allowed(False)
-        solutions = self.pre_solutions(goals['pre'], frame_id, tcp_to_link)
+        found = self.find_envelope(grasp)
+        if found is None:
+            return self.reject('no contact-free hand position around the object')
+        grasp, width, retreat = found
+        self.get_logger().info(
+            f'Hand envelopes the object: {width:.3f} m free across, backed off {retreat:.3f} m')
+
+        goals = self.targets(grasp)
+        solutions = self.pre_solutions(goals['pre'])
         if not solutions:
             return self.reject('no collision-free IK solution for the pre-grasp')
         for joints in solutions:
-            plan, reason = self.check_branch(joints, goals, frame_id, tcp_to_link)
+            plan, reason = self.check_branch(joints, goals)
             if plan is not None:
                 self.get_logger().info(
-                    f'Candidate accepted ({len(solutions)} pre-grasp solutions found)')
+                    f'Hand pose accepted ({len(solutions)} pre-grasp solutions found)')
                 return plan
             self.reject(reason)
         return None
 
-    def execute_pick(self, plan, frame_id, tcp_to_link):
+    def execute_pick(self, plan):
         goals = plan['goals']
 
         self.set_contact_allowed(False)
@@ -609,82 +730,27 @@ class PickExecutor(Node):
         if not self.execute_trajectory(plan['pre_trajectory']):
             raise RuntimeError('Pre-grasp failed')
         self.get_logger().info('Approach')
-        self.line_move(goals['standoff'], frame_id, tcp_to_link, 'Approach')
+        self.line_move(goals['grasp'], 'Approach')
 
         self.set_contact_allowed(True)
-        self.get_logger().info('Final approach')
-        self.line_move(goals['grasp'], frame_id, tcp_to_link, 'Final approach')
-
         self.get_logger().info('Close gripper')
         if not self.close_until_contact():
-            raise RuntimeError('Gripper close failed')
-        self.attach_object()
+            raise RuntimeError('Close gripper failed')
 
         self.get_logger().info('Lift')
-        self.line_move(goals['lift'], frame_id, tcp_to_link, 'Lift')
+        self.line_move(goals['lift'], 'Lift')
 
         self.get_logger().info('Up')
         self.spin_for(0.3)
         if not self.move_to_joints(self.get_parameter('up_joints').value):
             raise RuntimeError('Up move failed')
 
-    def order_by_reach(self, poses, frame_id, tcp_to_link):
-        """Sorts candidates by the joint swing their pre-grasp needs, cheapest first."""
-        start = list(self.joint_positions)
-        self.set_contact_allowed(True)
-        ranked = []
-        for pose in poses:
-            pre = self.targets(pose_to_matrix(pose))['pre']
-            joints = self.solve_ik(pre @ tcp_to_link, frame_id, start)
-            cost = (float('inf') if joints is None
-                    else max(abs(a - b) for a, b in zip(joints[:5], start[:5])))
-            ranked.append((cost, pose))
-        ranked.sort(key=lambda item: item[0])  # stable: ties keep GraspNet's score order
-        return [pose for _, pose in ranked]
-
-    def touches_object(self, joints):
-        """True if the robot in this arm configuration touches the object (current gripper state)."""
-        positions = dict(self.joint_map)
-        positions.update(zip(ARM_JOINTS, (float(q) for q in joints)))
-        request = GetStateValidity.Request()
-        request.group_name = self.get_parameter('group_name').value
-        request.robot_state.joint_state = JointState(
-            name=list(positions), position=list(positions.values()))
-        response = self.call_service(self.validity_client, request)
-        return any(OBJECT_ID in (c.contact_body_1, c.contact_body_2)
-                   for c in response.contacts)
-
-    def clearance(self, grasp, frame_id, tcp_to_link):
-        """Distance to back off along the approach until the open hand is clear of the object.
-
-        Returns (distance, None) or (None, reason)."""
-        step = self.get_parameter('clearance_step').value
-        if not self.model_object:
-            return step, None
-        limit = self.get_parameter('max_clearance').value
-        approach = grasp[:3, 0]
-        self.set_contact_allowed(False)
-        seed = list(self.joint_positions)
-        back = step
-        while back <= limit + 1e-9:
-            target = grasp.copy()
-            target[:3, 3] -= back * approach
-            joints = self.solve_ik(
-                target @ tcp_to_link, frame_id, seed, avoid_collisions=False)
-            if joints is None:
-                return None, 'pose on the way out of the grasp is unreachable'
-            if not self.touches_object(joints):
-                return back, None
-            seed = joints
-            back += step
-        return None, 'open hand still touches the object at the maximum back-off'
-
     # ---------- sequence ----------
 
     def ready(self):
         return (
             self.candidates is not None and self.candidates.poses
-            and (self.scene_points is not None or not self.model_object)
+            and self.scene_points is not None
             and self.joint_positions is not None
             and self.finger_positions is not None
             and self.tf_buffer.can_transform(
@@ -697,7 +763,7 @@ class PickExecutor(Node):
         while rclpy.ok() and not self.ready():
             rclpy.spin_once(self, timeout_sec=0.1)
 
-        frame_id = self.candidates.header.frame_id
+        self.frame_id = self.candidates.header.frame_id
         try:
             link_from_tcp = lookup_matrix(
                 self.tf_buffer, self.get_parameter('ik_link').value,
@@ -705,45 +771,46 @@ class PickExecutor(Node):
         except TransformException as e:
             self.get_logger().error(f'TF lookup failed: {e}')
             return False
-        tcp_to_link = np.linalg.inv(link_from_tcp)
+        self.tcp_to_link = np.linalg.inv(link_from_tcp)
 
-        if self.model_object:
-            try:
-                self.gripper_links = self.discover_gripper_links()
-                self.remove_object()
-                best = self.candidates.poses[0].position
-                box = self.object_box(np.array([best.x, best.y, best.z]))
-                if box is None:
-                    self.get_logger().error('Too few cloud points near the best grasp')
-                    return False
-                self.add_object(*box)
-            except RuntimeError as e:
-                self.get_logger().error(str(e))
-                return False
-            low, high = box
-            self.get_logger().info(
-                f'Object box size {np.round(high - low, 3).tolist()} '
-                f'centre {np.round((low + high) / 2, 3).tolist()}; '
-                f'{len(self.gripper_links)} gripper links')
-
+        # Open first: the hand geometry below must be measured with the fingers open
         if not self.move_gripper(self.get_parameter('gripper_open').value):
             return False
+        self.spin_for(0.5)
 
-        total = len(self.candidates.poses)
-        for rank, pose in enumerate(self.candidates.poses, 1):
-            self.get_logger().info(f'Candidate {rank}/{total}')
-            try:
-                plan = self.screen(pose, frame_id, tcp_to_link)
-                if plan is None:
+        try:
+            self.hand_geometry()
+            self.gripper_links = self.discover_gripper_links()
+            self.remove_object()
+            self.add_object()
+        except (TransformException, RuntimeError) as e:
+            self.get_logger().error(str(e))
+            return False
+
+        proposals = [pose_to_matrix(p) for p in self.candidates.poses]
+        proposals.append(self.top_down_grasp())
+        tried = []
+        for rank, proposal in enumerate(proposals, 1):
+            for grasp in self.hand_poses(proposal):
+                if any(is_similar(grasp, other) for other in tried):
                     continue
-                self.execute_pick(plan, frame_id, tcp_to_link)
-            except RuntimeError as e:
-                self.get_logger().error(str(e))
-                return False
-            self.get_logger().info('Pick complete')
-            return True
+                tried.append(grasp)
+                label = 'top-down fallback' if rank == len(proposals) else f'{rank}/{len(proposals)}'
+                self.get_logger().info(f'Proposal {label}')
+                try:
+                    plan = self.screen(grasp)
+                    if plan is None:
+                        continue
+                    self.execute_pick(plan)
+                except RuntimeError as e:
+                    self.get_logger().error(str(e))
+                    return False
+                self.get_logger().info('Pick complete')
+                return True
+
         summary = ', '.join(f'{n}x {reason}' for reason, n in self.rejections.most_common())
-        self.get_logger().error(f'No candidate gave a feasible pick ({summary})')
+        self.get_logger().error(f'No hand pose gave a feasible pick ({summary})')
+        return False
 
 
 def main():
