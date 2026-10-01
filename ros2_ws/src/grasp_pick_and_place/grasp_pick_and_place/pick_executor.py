@@ -24,6 +24,7 @@ from sensor_msgs.msg import JointState, PointCloud2
 from shape_msgs.msg import SolidPrimitive
 from tf2_ros import Buffer, TransformException, TransformListener
 from trajectory_msgs.msg import JointTrajectoryPoint
+from scipy.spatial import ConvexHull
 
 from grasp_pick_and_place.transform_utils import lookup_matrix, matrix_to_pose, pose_to_matrix
 
@@ -36,6 +37,7 @@ GRIPPER_JOINTS = [
 ]
 MOVEIT_SUCCESS = 1
 OBJECT_ID = 'target_object'
+SUPPORT_ID = 'support_table'
 
 
 def fit_box(points, margin):
@@ -50,15 +52,16 @@ def fit_box(points, margin):
         local = xy @ np.array([[c, -s], [s, c]])  # coordinates along (c, s) and (-s, c)
         low, high = local.min(axis=0), local.max(axis=0)
         area = np.prod(high - low)
-        if best is None or area < best[0]:
+        if best is None or area < best[0] * 0.98:
             best = (area, yaw, low, high)
     _, yaw, low, high = best
+    fill = ConvexHull(xy).volume / np.prod(high - low)
     c, s = np.cos(yaw), np.sin(yaw)
     centre_xy = np.array([[c, -s], [s, c]]) @ ((low + high) / 2.0)
     z_low, z_high = points[:, 2].min(), points[:, 2].max()
     centre = np.array([centre_xy[0], centre_xy[1], (z_low + z_high + margin) / 2.0])
     size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
-    return centre, size, yaw
+    return centre, size, yaw, fill
 
 
 def is_similar(a, b, max_dist=0.01, max_angle=0.1):
@@ -126,6 +129,9 @@ class PickExecutor(Node):
         self.declare_parameter('max_retreat', 0.03)
         self.declare_parameter('min_free_width', 0.01)
         self.declare_parameter('fallback_depth', 0.02)
+        self.declare_parameter('support_centre', [0.6, 0.0])  # xy of the table block, scene frame
+        self.declare_parameter('support_size', [0.6, 0.8])    # xy extent of the table top
+        self.declare_parameter('prismatic_fill', 0.9)
 
         self.candidates = None
         self.scene_points = None
@@ -143,6 +149,7 @@ class PickExecutor(Node):
         self.object_centre = None
         self.object_size = None
         self.box_axes = None       # +-x and +-y of the object box, in the scene frame
+        self.round_object = False
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -265,7 +272,8 @@ class PickExecutor(Node):
         points = self.scene_points.astype(float)
         if points.shape[0] < 20:
             raise RuntimeError('Too few cloud points to model the object')
-        centre, size, yaw = fit_box(points, self.get_parameter('object_margin').value)
+        centre, size, yaw, fill = fit_box(points, self.get_parameter('object_margin').value)
+        self.round_object = fill < self.get_parameter('prismatic_fill').value
         self.object_centre, self.object_size = centre, size
         ex = np.array([np.cos(yaw), np.sin(yaw), 0.0])
         ey = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
@@ -275,8 +283,12 @@ class PickExecutor(Node):
         obj.header.frame_id = self.scene_frame
         obj.id = OBJECT_ID
         primitive = SolidPrimitive()
-        primitive.type = SolidPrimitive.BOX
-        primitive.dimensions = [float(v) for v in size]
+        if self.round_object:
+            primitive.type = SolidPrimitive.CYLINDER
+            primitive.dimensions = [float(size[2]), float(size[:2].mean() / 2.0)]  # height, radius
+        else:
+            primitive.type = SolidPrimitive.BOX
+            primitive.dimensions = [float(v) for v in size]
         pose = Pose()
         pose.position.x, pose.position.y, pose.position.z = map(float, centre)
         qx, qy, qz, qw = Rotation.from_euler('z', yaw).as_quat()
@@ -291,7 +303,30 @@ class PickExecutor(Node):
         self.apply_scene(scene)
         self.get_logger().info(
             f'Object box size {np.round(size, 3).tolist()} centre {np.round(centre, 3).tolist()} '
-            f'yaw {np.rad2deg(yaw):.0f} deg')
+            f'yaw {np.rad2deg(yaw):.0f} deg'
+            f'footprint fill {fill:.2f}')
+
+    def add_support(self):
+        """Adds the table as a block on the floor whose top is the cloud's lowest point."""
+        top = self.object_centre[2] - self.object_size[2] / 2.0
+        size_x, size_y = self.get_parameter('support_size').value
+        centre_x, centre_y = self.get_parameter('support_centre').value
+        obj = CollisionObject()
+        obj.header.frame_id = self.scene_frame
+        obj.id = SUPPORT_ID
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = [float(size_x), float(size_y), float(top)]
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = float(centre_x), float(centre_y), float(top / 2.0)
+        pose.orientation.w = 1.0
+        obj.primitives = [primitive]
+        obj.primitive_poses = [pose]
+        obj.operation = CollisionObject.ADD
+        scene = PlanningScene()
+        scene.is_diff = True
+        scene.world.collision_objects = [obj]
+        self.apply_scene(scene)
 
     def set_contact_allowed(self, allowed):
         """Allow or forbid gripper-object contact in MoveIt's collision matrix."""
@@ -564,7 +599,15 @@ class PickExecutor(Node):
             target = axis - approach * (axis @ approach)
             target /= np.linalg.norm(target)
             turns.append(np.arctan2(approach @ np.cross(closing, target), closing @ target))
+
         snap = min(turns, key=abs)
+        if self.round_object:
+            # Every horizontal direction is a "face" of an upright round object: close level
+            level = np.cross([0.0, 0.0, 1.0], approach)  # horizontal and perpendicular to the approach
+            if np.linalg.norm(level) > 1e-6:  # a vertical approach keeps the box-face snap
+                level /= np.linalg.norm(level)
+                level *= np.sign(closing @ level) or 1.0  # keep the smaller of the two turns
+                snap = np.arctan2(approach @ np.cross(closing, level), closing @ level)
 
         offset = self.object_centre - proposal[:3, 3]
         offset -= approach * (offset @ approach)
@@ -599,9 +642,10 @@ class PickExecutor(Node):
         request.robot_state.joint_state = JointState(
             name=list(positions), position=list(positions.values()))
         response = self.call_service(self.validity_client, request)
-        return sorted({c.contact_body_2 if c.contact_body_1 == OBJECT_ID else c.contact_body_1
+        touched = (OBJECT_ID, SUPPORT_ID)
+        return sorted({c.contact_body_2 if c.contact_body_1 in touched else c.contact_body_1
                        for c in response.contacts
-                       if OBJECT_ID in (c.contact_body_1, c.contact_body_2)})
+                       if c.contact_body_1 in touched or c.contact_body_2 in touched})
 
     def find_envelope(self, grasp):
         """Slides the open hand across its closing axis, backing off along the approach if
@@ -706,6 +750,13 @@ class PickExecutor(Node):
         if found is None:
             return self.reject('no contact-free hand position around the object')
         grasp, width, retreat = found
+        centre = grasp[:3, 3] + grasp[:3, :3] @ self.hand_centre
+        base = self.object_centre[2] - self.object_size[2] / 2.0
+        self.get_logger().info(
+            f'Closing centre {centre[2] - base:.3f} m above the object base '
+            f'(object height {self.object_size[2]:.3f} m)')
+        self.get_logger().info(
+            f'Approach z {grasp[2, 0]:+.2f}, closing axis z {(grasp[:3, :3] @ self.hand_axis)[2]:+.2f}')
         self.get_logger().info(
             f'Hand envelopes the object: {width:.3f} m free across, backed off {retreat:.3f} m')
 
@@ -736,6 +787,11 @@ class PickExecutor(Node):
         self.get_logger().info('Close gripper')
         if not self.close_until_contact():
             raise RuntimeError('Close gripper failed')
+
+        for frame in (*self.get_parameter('hand_pair_frames').value,
+                      self.get_parameter('hand_opposing_frame').value):
+            p = lookup_matrix(self.tf_buffer, self.frame_id, frame)[:3, 3] - self.object_centre
+            self.get_logger().info(f'{frame} vs object centre: {np.round(p, 3).tolist()}')
 
         self.get_logger().info('Lift')
         self.line_move(goals['lift'], 'Lift')
@@ -783,6 +839,7 @@ class PickExecutor(Node):
             self.gripper_links = self.discover_gripper_links()
             self.remove_object()
             self.add_object()
+            self.add_support()
         except (TransformException, RuntimeError) as e:
             self.get_logger().error(str(e))
             return False
