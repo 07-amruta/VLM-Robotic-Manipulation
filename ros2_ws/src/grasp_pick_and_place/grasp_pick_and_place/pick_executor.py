@@ -43,7 +43,7 @@ SUPPORT_ID = 'support_table'
 def fit_box(points, margin):
     """Yaw-aligned box around a cloud: minimum-area rectangle in xy, full extent in z.
 
-    Returns (centre, size, yaw). The bottom face sits on the cloud's lowest point (the table).
+    Returns (centre, size, yaw, fill). The bottom face sits on the cloud's lowest point (the table).
     """
     xy = points[:, :2]
     best = None
@@ -62,6 +62,18 @@ def fit_box(points, margin):
     centre = np.array([centre_xy[0], centre_xy[1], (z_low + z_high + margin) / 2.0])
     size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
     return centre, size, yaw, fill
+
+def top_slice(points, fraction):
+    """Points in the highest `fraction` of the cloud's height."""
+    z = points[:, 2]
+    return points[z >= z.max() - fraction * (z.max() - z.min())]
+
+
+def is_dome(points, fraction, ratio):
+    """True when the top slice is much narrower than the whole cloud (a sphere's cap) rather than
+    as wide as it (flat top: upright cylinder, box)."""
+    widest = np.ptp(points[:, :2], axis=0).max()
+    return np.ptp(top_slice(points, fraction)[:, :2], axis=0).max() < ratio * widest
 
 
 def is_similar(a, b, max_dist=0.01, max_angle=0.1):
@@ -83,10 +95,11 @@ def longest_run(flags):
 class PickExecutor(Node):
     """Picks one object: open, pre-grasp, straight approach, close, straight lift, up.
 
-    Every proposed grasp is first turned into a hand pose that envelopes the object (closing
-    axis on a box face normal, hand centred on the object). A hand pose is only used if the
-    open hand touches nothing there, and if IK, the pre-grasp plan, the straight approach,
-    the lift and the up move are all feasible. Nothing moves until a pose passes every check.
+    Every proposal is turned into hand poses that envelope the object (closing axis on a box face
+    normal, closing centre on the object's centroid, backed off along the approach only as far as
+    the open hand needs). All placements are found first without moving and ranked by how close the
+    closing centre is to the centroid. A placement is only executed if IK, the pre-grasp plan, the
+    straight approach, the lift and the up move are all feasible. Nothing moves until one passes.
     """
 
     def __init__(self):
@@ -106,7 +119,7 @@ class PickExecutor(Node):
         self.declare_parameter('cartesian_step', 0.01)
         self.declare_parameter('cartesian_joint_speed', 0.3)
         self.declare_parameter('max_joint_step', 0.3)
-        self.declare_parameter('object_margin', 0.01)
+        self.declare_parameter('object_margin', 0.004)
         self.declare_parameter('gripper_link_prefix', 'gripper_')
         self.declare_parameter('gripper_links', '')  # comma-separated override
         self.declare_parameter('gripper_open', [0.05, 0.05, 0.05])
@@ -126,18 +139,19 @@ class PickExecutor(Node):
         self.declare_parameter('search_step', 0.005)
         self.declare_parameter('search_reach', 0.04)
         self.declare_parameter('retreat_step', 0.01)
-        self.declare_parameter('max_retreat', 0.03)
-        self.declare_parameter('min_free_width', 0.01)
-        self.declare_parameter('fallback_depth', 0.02)
+        self.declare_parameter('min_free_width', 0.005)
         self.declare_parameter('support_centre', [0.6, 0.0])  # xy of the table block, scene frame
         self.declare_parameter('support_size', [0.6, 0.8])    # xy extent of the table top
         self.declare_parameter('prismatic_fill', 0.9)
+        self.declare_parameter('dome_slice', 0.15)       # top fraction of the cloud's height
+        self.declare_parameter('dome_ratio', 0.8)
 
         self.candidates = None
         self.scene_points = None
         self.scene_frame = None
         self.joint_positions = None
         self.finger_positions = None
+        self.joint_stamp = None    # seconds, from the latest /joint_states header
         self.joint_map = {}
         self.gripper_links = []
         self.rejections = Counter()
@@ -150,6 +164,7 @@ class PickExecutor(Node):
         self.object_size = None
         self.box_axes = None       # +-x and +-y of the object box, in the scene frame
         self.round_object = False
+        self.sphere = False
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -196,6 +211,7 @@ class PickExecutor(Node):
         self.scene_frame = msg.header.frame_id
 
     def on_joint_state(self, msg):
+        self.joint_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         self.joint_map.update(zip(msg.name, msg.position))
         # Look joints up by name; JointState does not guarantee ordering
         if all(n in msg.name for n in ARM_JOINTS):
@@ -268,12 +284,25 @@ class PickExecutor(Node):
             self.apply_scene(scene)
 
     def add_object(self):
-        """Fits a yaw-aligned box to the scene cloud and adds it to MoveIt's scene."""
+        """Fits a box, cylinder or sphere to the scene cloud and adds it to MoveIt's scene."""
         points = self.scene_points.astype(float)
         if points.shape[0] < 20:
             raise RuntimeError('Too few cloud points to model the object')
-        centre, size, yaw, fill = fit_box(points, self.get_parameter('object_margin').value)
+        margin = self.get_parameter('object_margin').value
+        fraction = self.get_parameter('dome_slice').value
+        centre, size, yaw, fill = fit_box(points, margin)
         self.round_object = fill < self.get_parameter('prismatic_fill').value
+        self.sphere = self.round_object and is_dome(
+            points, fraction, self.get_parameter('dome_ratio').value)
+        if self.sphere:
+            # The underside is hidden from the camera: the pole gives the centre (xy from the top
+            # slice, z from the top of the cloud minus the radius) and the widest xy extent the
+            # diameter.
+            radius = float(size[:2].max() / 2.0)  # includes the margin
+            cap = top_slice(points, fraction)[:, :2]
+            centre = np.array([*(cap.min(axis=0) + cap.max(axis=0)) / 2.0,
+                               points[:, 2].max() - radius + margin])
+            size = np.full(3, 2.0 * radius)
         self.object_centre, self.object_size = centre, size
         ex = np.array([np.cos(yaw), np.sin(yaw), 0.0])
         ey = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
@@ -283,7 +312,10 @@ class PickExecutor(Node):
         obj.header.frame_id = self.scene_frame
         obj.id = OBJECT_ID
         primitive = SolidPrimitive()
-        if self.round_object:
+        if self.sphere:
+            primitive.type = SolidPrimitive.SPHERE
+            primitive.dimensions = [float(size[0] / 2.0)]  # radius
+        elif self.round_object:
             primitive.type = SolidPrimitive.CYLINDER
             primitive.dimensions = [float(size[2]), float(size[:2].mean() / 2.0)]  # height, radius
         else:
@@ -301,9 +333,10 @@ class PickExecutor(Node):
         scene.is_diff = True
         scene.world.collision_objects = [obj]
         self.apply_scene(scene)
+        shape = 'sphere' if self.sphere else 'cylinder' if self.round_object else 'box'
         self.get_logger().info(
-            f'Object box size {np.round(size, 3).tolist()} centre {np.round(centre, 3).tolist()} '
-            f'yaw {np.rad2deg(yaw):.0f} deg'
+            f'Object {shape} size {np.round(size, 3).tolist()} '
+            f'centre {np.round(centre, 3).tolist()} yaw {np.rad2deg(yaw):.0f} deg, '
             f'footprint fill {fill:.2f}')
 
     def add_support(self):
@@ -527,28 +560,47 @@ class PickExecutor(Node):
         previous = list(start)
         still = [0] * len(GRIPPER_JOINTS)
         stalled = [False] * len(GRIPPER_JOINTS)
+        wall_mark, robot_mark, rtf, n = time.monotonic(), self.joint_stamp, float('nan'), 0
+        moved = [False] * len(GRIPPER_JOINTS)
         while rclpy.ok() and time.monotonic() < deadline:
+            n += 1
+            now_wall, now_robot = time.monotonic(), self.joint_stamp
+            if now_wall > wall_mark:
+                rtf = (now_robot - robot_mark) / (now_wall - wall_mark)  # robot s per wall s
+            wall_mark, robot_mark = now_wall, now_robot
+
             for i, name in enumerate(GRIPPER_JOINTS):
                 if stalled[i]:
                     continue
                 measured = self.finger_positions[i]
                 still[i] = still[i] + 1 if abs(measured - previous[i]) < eps else 0
                 previous[i] = measured
-                has_moved = measured - start[i] > step
-                blocked = has_moved and still[i] >= needed and target[i] - measured > lag
+                moved[i] = moved[i] or measured - start[i] > step  # latched: a finger pushed back to its open stop has still moved
+                blocked = moved[i] and still[i] >= needed and target[i] - measured > lag
                 if blocked:
+                    self.get_logger().info(
+                        f'{name} stalled at {measured:.3f} '
+                        f'(travel {measured - start[i]:.3f}, lag {target[i] - measured:.3f}, '
+                        f'iter {n}, rtf {rtf:.2f})')
                     stalled[i] = True
                     target[i] = measured + margin
-                    self.get_logger().info(f'{name} stalled at {measured:.3f}')
                 elif target[i] >= limits[i]:
                     self.get_logger().error(f'{name} reached its limit without contact')
                     return False
                 else:
                     target[i] = min(target[i] + step, limits[i])
 
+            self.get_logger().info(
+                f'iter {n}: measured {[round(p, 3) for p in self.finger_positions]} '
+                f'target {[round(t, 3) for t in target]} still {still} '
+                f'stalled {stalled} rtf {rtf:.2f}')
+            
             self.gripper_client.send_goal_async(self.finger_goal(target, period))
             self.spin_for(period)
             if all(stalled):
+                self.get_logger().info(
+                    f'Close done after {n} iters: finger travel '
+                    f'{[round(p - s, 3) for p, s in zip(self.finger_positions, start)]}')
                 return True
         self.get_logger().error('Gripper close timed out')
         return False
@@ -581,13 +633,20 @@ class PickExecutor(Node):
             f'centre {np.round(self.hand_centre, 3).tolist()} gap {gap:.3f} m, '
             f'palm x {palm[0]:.3f} (tcp frame)')
 
-    def hand_poses(self, proposal):
-        """Turns a proposed grasp into hand poses that envelope the object.
+    def extent_along(self, direction):
+        """Length of the object's box projected on a unit direction."""
+        ex, _, ey, _ = self.box_axes
+        return float(abs(direction @ ex) * self.object_size[0]
+                     + abs(direction @ ey) * self.object_size[1]
+                     + abs(direction[2]) * self.object_size[2])
 
-        The hand's closing axis is put on the proposal's jaw axis, then snapped to the nearest
-        box face normal, and the hand's closing centre is moved onto the object's centre
-        across the approach. Approach axis and depth stay as proposed. Both 180-degree wrist
-        variants are returned.
+    def hand_poses(self, proposal):
+        """Turns a proposal into hand poses that envelope the object.
+
+        Only the proposal's approach direction is used. The hand's closing axis is put on the
+        proposal's jaw axis, then snapped to the nearest box face normal that is not parallel to
+        the approach (or to the level direction for a round object), and the hand's closing centre
+        is put on the object's centroid. Both 180-degree wrist variants are returned.
         """
         approach = proposal[:3, 0]
         tilt = -np.arctan2(self.hand_axis[2], self.hand_axis[1])
@@ -597,7 +656,10 @@ class PickExecutor(Node):
         turns = []
         for axis in self.box_axes:
             target = axis - approach * (axis @ approach)
-            target /= np.linalg.norm(target)
+            length = np.linalg.norm(target)
+            if length < 1e-3:  # face normal parallel to the approach: no closing direction here
+                continue
+            target /= length
             turns.append(np.arctan2(approach @ np.cross(closing, target), closing @ target))
 
         snap = min(turns, key=abs)
@@ -609,14 +671,12 @@ class PickExecutor(Node):
                 level *= np.sign(closing @ level) or 1.0  # keep the smaller of the two turns
                 snap = np.arctan2(approach @ np.cross(closing, level), closing @ level)
 
-        offset = self.object_centre - proposal[:3, 3]
-        offset -= approach * (offset @ approach)
         poses = []
         for extra in (0.0, np.pi):
             r = Rotation.from_rotvec(approach * (snap + extra)).as_matrix() @ rot
             pose = np.eye(4)
             pose[:3, :3] = r
-            pose[:3, 3] = proposal[:3, 3] + offset - r @ self.hand_centre
+            pose[:3, 3] = self.object_centre - r @ self.hand_centre
             poses.append(pose)
         return poses
 
@@ -625,12 +685,9 @@ class PickExecutor(Node):
         ex, _, ey, _ = self.box_axes
         closing = ex if self.object_size[0] <= self.object_size[1] else ey
         approach = np.array([0.0, 0.0, -1.0])
-        top = self.object_centre[2] + self.object_size[2] / 2.0
         grasp = np.eye(4)
         grasp[:3, :3] = np.column_stack([approach, closing, np.cross(approach, closing)])
-        grasp[:3, 3] = [
-            self.object_centre[0], self.object_centre[1],
-            top - self.get_parameter('fallback_depth').value]
+        grasp[:3, 3] = self.object_centre
         return grasp
 
     def object_contacts(self, joints):
@@ -648,15 +705,16 @@ class PickExecutor(Node):
                        if c.contact_body_1 in touched or c.contact_body_2 in touched})
 
     def find_envelope(self, grasp):
-        """Slides the open hand across its closing axis, backing off along the approach if
-        needed, to where it touches nothing. Returns (pose, free_width, retreat) or None."""
+        """Slides the open hand across its closing axis, backing off along the approach (at most
+        to the object's near surface) if needed, to where it touches nothing.
+        Returns (pose, free_width, retreat) or None."""
         step = self.get_parameter('search_step').value
         reach = self.get_parameter('search_reach').value
         offsets = np.arange(-reach, reach + 1e-9, step)
-        retreats = np.arange(0.0, self.get_parameter('max_retreat').value + 1e-9,
-                             self.get_parameter('retreat_step').value)
         closing = grasp[:3, :3] @ self.hand_axis
         approach = grasp[:3, 0]
+        retreats = np.arange(0.0, self.extent_along(approach) / 2.0 + 1e-9,
+                             self.get_parameter('retreat_step').value)
         seed = list(self.joint_positions)
         closest = None
         for retreat in retreats:
@@ -687,7 +745,7 @@ class PickExecutor(Node):
                 f'Closest miss: {contacts} at offset {offset:+.3f} m, retreat {retreat:.3f} m')
         return None
 
-    # ---------- one hand pose: check, then execute ----------
+    # ---------- one hand pose: place, then check, then execute ----------
 
     def targets(self, grasp):
         # Start outside the object's bounding sphere, whatever its size
@@ -743,23 +801,25 @@ class PickExecutor(Node):
             return None, 'no collision-free path to the pre-grasp'
         return {'goals': goals, 'pre_trajectory': pre_trajectory}, None
 
-    def screen(self, grasp):
-        """Checks one hand pose end to end without moving. Returns a plan dict or None."""
+    def place_hand(self, grasp):
+        """Finds where the open hand fits around the object for one hand pose, without moving.
+
+        Returns (pose, free_width, retreat, offset) or None. `offset` is the distance of the
+        closing centre from the object's centroid as a fraction of the object's half-diagonal
+        (0 = on the centroid), used to rank placements.
+        """
         self.set_contact_allowed(False)
         found = self.find_envelope(grasp)
         if found is None:
             return self.reject('no contact-free hand position around the object')
-        grasp, width, retreat = found
-        centre = grasp[:3, 3] + grasp[:3, :3] @ self.hand_centre
-        base = self.object_centre[2] - self.object_size[2] / 2.0
-        self.get_logger().info(
-            f'Closing centre {centre[2] - base:.3f} m above the object base '
-            f'(object height {self.object_size[2]:.3f} m)')
-        self.get_logger().info(
-            f'Approach z {grasp[2, 0]:+.2f}, closing axis z {(grasp[:3, :3] @ self.hand_axis)[2]:+.2f}')
-        self.get_logger().info(
-            f'Hand envelopes the object: {width:.3f} m free across, backed off {retreat:.3f} m')
+        pose, width, retreat = found
+        centre = pose[:3, 3] + pose[:3, :3] @ self.hand_centre
+        offset = float(np.linalg.norm(centre - self.object_centre)
+                       / (0.5 * np.linalg.norm(self.object_size)))
+        return pose, width, retreat, offset
 
+    def plan_pick(self, grasp):
+        """IK and motion checks for a placed hand pose, without moving. Returns a plan or None."""
         goals = self.targets(grasp)
         solutions = self.pre_solutions(goals['pre'])
         if not solutions:
@@ -795,11 +855,13 @@ class PickExecutor(Node):
 
         self.get_logger().info('Lift')
         self.line_move(goals['lift'], 'Lift')
+        self.get_logger().info(f'Fingers after lift: {np.round(self.finger_positions, 3).tolist()}')
 
         self.get_logger().info('Up')
         self.spin_for(0.3)
         if not self.move_to_joints(self.get_parameter('up_joints').value):
             raise RuntimeError('Up move failed')
+        self.get_logger().info(f'Fingers after up: {np.round(self.finger_positions, 3).tolist()}')
 
     # ---------- sequence ----------
 
@@ -846,24 +908,47 @@ class PickExecutor(Node):
 
         proposals = [pose_to_matrix(p) for p in self.candidates.poses]
         proposals.append(self.top_down_grasp())
-        tried = []
-        for rank, proposal in enumerate(proposals, 1):
-            for grasp in self.hand_poses(proposal):
-                if any(is_similar(grasp, other) for other in tried):
-                    continue
-                tried.append(grasp)
-                label = 'top-down fallback' if rank == len(proposals) else f'{rank}/{len(proposals)}'
-                self.get_logger().info(f'Proposal {label}')
-                try:
-                    plan = self.screen(grasp)
-                    if plan is None:
+
+        # Phase 1: place the open hand for every proposal without moving, then rank the placements
+        placed, tried = [], []
+        try:
+            for rank, proposal in enumerate(proposals, 1):
+                for grasp in self.hand_poses(proposal):
+                    if any(is_similar(grasp, other) for other in tried):
                         continue
-                    self.execute_pick(plan)
-                except RuntimeError as e:
-                    self.get_logger().error(str(e))
-                    return False
-                self.get_logger().info('Pick complete')
-                return True
+                    tried.append(grasp)
+                    result = self.place_hand(grasp)
+                    if result is not None:
+                        placed.append((result[3], rank, *result[:3]))
+        except RuntimeError as e:
+            self.get_logger().error(str(e))
+            return False
+        placed.sort(key=lambda item: item[0])  # stable: GraspNet order breaks ties
+        self.get_logger().info(f'{len(placed)} of {len(tried)} hand poses fit around the object')
+
+        # Phase 2: best placement first, execute the first one whose whole pick is feasible
+        base = self.object_centre[2] - self.object_size[2] / 2.0
+        for offset, rank, grasp, width, retreat in placed:
+            label = 'top-down fallback' if rank == len(proposals) else f'{rank}/{len(proposals)}'
+            centre = grasp[:3, 3] + grasp[:3, :3] @ self.hand_centre
+            self.get_logger().info(f'Proposal {label}: closing centre {offset:.2f} of the half-diagonal from the centroid')
+            self.get_logger().info(
+                f'Closing centre {centre[2] - base:.3f} m above the object base '
+                f'(object height {self.object_size[2]:.3f} m)')
+            self.get_logger().info(
+                f'Approach z {grasp[2, 0]:+.2f}, closing axis z {(grasp[:3, :3] @ self.hand_axis)[2]:+.2f}')
+            self.get_logger().info(
+                f'Hand envelopes the object: {width:.3f} m free across, backed off {retreat:.3f} m')
+            try:
+                plan = self.plan_pick(grasp)
+                if plan is None:
+                    continue
+                self.execute_pick(plan)
+            except RuntimeError as e:
+                self.get_logger().error(str(e))
+                return False
+            self.get_logger().info('Pick complete')
+            return True
 
         summary = ', '.join(f'{n}x {reason}' for reason, n in self.rejections.most_common())
         self.get_logger().error(f'No hand pose gave a feasible pick ({summary})')
