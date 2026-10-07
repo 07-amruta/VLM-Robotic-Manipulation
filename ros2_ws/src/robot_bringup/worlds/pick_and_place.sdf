@@ -50,7 +50,7 @@
 
     <model name="workspace_table">
         <static>true</static>
-        <pose>0.6 0 0.15 0 0 0</pose>
+        <pose>0 0.75 0.15 0 0 1.5708</pose>
         <link name="link">
             <collision name="collision">
             <geometry><box><size>0.6 0.8 0.3</size></box></geometry>
@@ -69,7 +69,7 @@
 
     <!-- 1. Upright cylinder: 7 cm diameter, 10 cm tall -->
     <!-- <model name="test_cylinder">
-        <pose>0.508 -0.001 0.355 0 0 0</pose>
+        <pose>0.001 0.658 0.355 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -97,7 +97,7 @@
     
     <!-- 2. Original cube: 8 cm -->
     <!-- <model name="test_cube">
-        <pose>0.508 -0.001 0.35 0 0 0</pose>
+        <pose>0.001 0.658 0.35 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -118,10 +118,10 @@
     </model> -->
    
 
-    <!--
-    3. Tall narrow box: 5 x 5 x 14 cm
-    <model name="test_tall_box">
-        <pose>0.508 -0.001 0.375 0 0 0</pose>
+    
+    <!-- 3. Tall narrow box: 5 x 5 x 14 cm -->
+    <!-- <model name="test_tall_box">
+        <pose>0.001 0.658 0.375 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -139,13 +139,13 @@
             </material>
             </visual>
         </link>
-    </model>
-    -->
+    </model> -->
+   
 
-    <!--
-    4. Small cube: 4 cm
-    <model name="test_small_box">
-        <pose>0.508 -0.001 0.325 0 0 0</pose>
+    
+    <!-- 4. Small cube: 4 cm -->
+    <!-- <model name="test_small_box">
+        <pose>0.001 0.658 0.325 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -166,10 +166,10 @@
     </model>
     -->
 
-    <!--
-    5. Wide flat box near the hand's opening limit: 11 x 11 x 6 cm
-    <model name="test_wide_box">
-        <pose>0.508 -0.001 0.335 0 0 0</pose>
+    
+    <!-- 5. Wide flat box near the hand's opening limit: 11 x 11 x 6 cm -->
+    <!-- <model name="test_wide_box">
+        <pose>0.001 0.658 0.335 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -192,8 +192,8 @@
 
     
     <!-- 6. Sphere: 8 cm diameter -->
-    <model name="test_sphere">
-        <pose>0.508 -0.001 0.345 0 0 0</pose>
+    <!-- <model name="test_sphere">
+        <pose>0.001 0.658 0.345 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -202,6 +202,11 @@
             </inertial>
             <collision name="collision">
             <geometry><sphere><radius>0.04</radius></sphere></geometry>
+            <surface>
+              <friction>
+                <ode><mu>2.0</mu><mu2>2.0</mu2></ode>
+              </friction>
+            </surface>
             </collision>
             <visual name="visual">
             <geometry><sphere><radius>0.04</radius></sphere></geometry>
@@ -211,13 +216,13 @@
             </material>
             </visual>
         </link>
-    </model>
+    </model> -->
    
 
-    <!--
-    7. Mug-like object: 8 cm cylinder body (9 cm tall) with a handle block on the +y side
+    
+    <!-- 7. Mug-like object: 8 cm cylinder body (9 cm tall) with a handle block on the +y side -->
     <model name="test_mug">
-        <pose>0.508 -0.001 0.350 0 0 0</pose>
+        <pose>0.001 0.658 0.350 0 0 0</pose>
         <static>false</static>
         <link name="link">
             <inertial>
@@ -248,11 +253,11 @@
             </visual>
         </link>
     </model>
-    -->
+   
 
     <model name="scene_camera">
         <static>true</static>
-        <pose>1.1 0 1.3 0 1.02 3.14159</pose>
+        <pose>0 1.25 1.3 0 1.02 4.7124</pose>
         <link name="link">
             <visual name="visual">
             <geometry><box><size>0.08 0.16 0.08</size></box></geometry>

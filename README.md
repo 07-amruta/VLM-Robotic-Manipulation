@@ -144,7 +144,7 @@ ros2 launch robot_bringup bringup.launch.py
 * To rest position of cylinder in Gazebo
 
 ```bash
-ign service -s /world/pick_and_place/set_pose --reqtype ignition.msgs.Pose --reptype ignition.msgs.Boolean --timeout 2000 --req 'name: "test_cylinder", position: {x: 0.508, y: -0.001, z: 0.355}, orientation: {x: 0, y: 0, z: 0, w: 1}'
+ign service -s /world/pick_and_place/set_pose --reqtype ignition.msgs.Pose --reptype ignition.msgs.Boolean --timeout 2000 --req 'name: "test_sphere", position: {x: 0.001, y: 0.658, z: 0.355}, orientation: {x: 0, y: 0, z: 0, w: 1}'
 ```
 
 

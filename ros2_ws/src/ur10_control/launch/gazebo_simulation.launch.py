@@ -134,8 +134,8 @@ def generate_launch_description():
         package="tf2_ros",
         executable="static_transform_publisher",
         arguments=[
-            "--x", "1.1", "--y", "0", "--z", "1.3",
-            "--roll", "0", "--pitch", "1.02", "--yaw", "3.14159",
+            "--x", "0", "--y", "1.25", "--z", "1.3",
+            "--roll", "0", "--pitch", "1.02", "--yaw", "4.7124",
             "--frame-id", "base_link",
             "--child-frame-id", "scene_camera_link",
         ],

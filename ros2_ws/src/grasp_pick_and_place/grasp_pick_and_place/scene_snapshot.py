@@ -31,8 +31,8 @@ class SceneSnapshot(Node):
         self.declare_parameter('camera_info_topic', '/scene_camera/camera_info')
         self.declare_parameter('optical_frame', 'scene_camera_optical')
         self.declare_parameter('target_frame', 'base_link')
-        self.declare_parameter('crop_min', [0.3, -0.4, 0.31])
-        self.declare_parameter('crop_max', [0.9, 0.4, 0.8])
+        self.declare_parameter('crop_min', [-0.4, 0.45, 0.31])
+        self.declare_parameter('crop_max', [0.4, 1.05, 0.8])
 
         self.depth_msg = None
         self.info_msg = None
@@ -132,6 +132,9 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RuntimeError:
+        if rclpy.ok():
+            raise  # a real failure; only swallow errors raised while the context shuts down
     finally:
         node.destroy_node()
         if rclpy.ok():
