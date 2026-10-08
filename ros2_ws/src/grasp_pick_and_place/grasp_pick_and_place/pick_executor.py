@@ -165,7 +165,6 @@ class PickExecutor(Node):
         self.scene_frame = None
         self.joint_positions = None
         self.finger_positions = None
-        self.joint_stamp = None    # seconds, from the latest /joint_states header
         self.joint_map = {}
         self.gripper_links = []
         self.rejections = Counter()
@@ -225,7 +224,6 @@ class PickExecutor(Node):
         self.scene_frame = msg.header.frame_id
 
     def on_joint_state(self, msg):
-        self.joint_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         self.joint_map.update(zip(msg.name, msg.position))
         # Look joints up by name; JointState does not guarantee ordering
         if all(n in msg.name for n in ARM_JOINTS):
@@ -448,22 +446,8 @@ class PickExecutor(Node):
         goal.request.goal_constraints.append(constraints)
         return goal
 
-    def move_to_joints(self, positions):
-        """Plan and execute a joint-space move from the current state."""
-        goal = self.joint_goal(positions)
-        goal.planning_options.plan_only = False
-        result = self.run_goal(self.move_group_client, goal)
-        if result is None:
-            self.get_logger().error('Joint move rejected by move_group')
-            return False
-        if result.error_code.val != MOVEIT_SUCCESS:
-            self.get_logger().error(
-                f'Joint move failed (MoveIt error code {result.error_code.val})')
-            return False
-        return True
-
     def plan_to_joints(self, start_joints, goal_joints):
-        """Plan only, from a given start state. Returns a RobotTrajectory or None."""
+        """Plan only (OMPL), from a given start state. Returns a RobotTrajectory or None."""
         goal = self.joint_goal(goal_joints)
         goal.request.start_state.joint_state = JointState(
             name=ARM_JOINTS, position=[float(p) for p in start_joints])
@@ -485,10 +469,6 @@ class PickExecutor(Node):
             name=list(positions), position=list(positions.values()))
         return self.call_service(self.validity_client, request)
 
-    def state_valid(self, joints):
-        """True when this arm configuration is collision-free in the current planning scene."""
-        return self.validity_at(joints).valid
-
     def plan_joint_line(self, start_joints, goal_joints):
         """Straight line in joint space, every state collision-checked. RobotTrajectory or None."""
         start, goal = np.array(start_joints, dtype=float), np.array(goal_joints, dtype=float)
@@ -498,34 +478,19 @@ class PickExecutor(Node):
         trajectory.joint_trajectory.joint_names = ARM_JOINTS
         for s in np.linspace(0.0, 1.0, n):
             q = start + s * (goal - start)
-            if not self.state_valid(q):
+            if not self.validity_at(q).valid:
                 return None
             trajectory.joint_trajectory.points.append(
                 JointTrajectoryPoint(positions=[float(v) for v in q]))
         self.time_parameterize(trajectory, self.get_parameter('joint_line_speed').value)
         return trajectory
 
-    def plan_joint_path(self, start_joints, goal_joints, label):
+    def plan_joint_path(self, start_joints, goal_joints):
         """Straight joint-space line if collision-free, else OMPL. RobotTrajectory or None."""
         trajectory = self.plan_joint_line(start_joints, goal_joints)
-        kind = 'line'
         if trajectory is None:
             trajectory = self.plan_to_joints(start_joints, goal_joints)
-            kind = 'planner'
-        if trajectory is None:
-            return None
-        self.log_path(f'{label} ({kind})', trajectory, start_joints, goal_joints)
         return trajectory
-
-    def log_path(self, label, trajectory, start, goal):
-        points = trajectory.joint_trajectory.points
-        travel = sum(abs(b - a) for p, q in zip(points[1:], points[:-1])
-                     for a, b in zip(p.positions, q.positions))
-        direct = float(np.abs(np.array(goal) - np.array(start)).sum())
-        t = points[-1].time_from_start
-        self.get_logger().info(
-            f'{label}: {t.sec + t.nanosec * 1e-9:.1f} s planned, joint travel {travel:.2f} rad '
-            f'vs direct {direct:.2f} rad, {len(points)} pts')
 
     def time_parameterize(self, trajectory, speed=None):
         """Positions-only timing: constant joint speed, strictly increasing stamps."""
@@ -611,8 +576,6 @@ class PickExecutor(Node):
         if result is None:
             self.get_logger().error('Gripper goal rejected')
             return False
-        # Fingers stalling on the object can report a tolerance error; that is expected when closing
-        self.get_logger().info(f'Gripper finished (error_code {result.error_code})')
         return True
 
     def close_until_contact(self):
@@ -632,14 +595,7 @@ class PickExecutor(Node):
         still = [0] * len(GRIPPER_JOINTS)
         stalled = [False] * len(GRIPPER_JOINTS)
         moved = [False] * len(GRIPPER_JOINTS)
-        wall_mark, robot_mark, rtf, n = time.monotonic(), self.joint_stamp, float('nan'), 0
         while rclpy.ok() and time.monotonic() < deadline:
-            n += 1
-            now_wall, now_robot = time.monotonic(), self.joint_stamp
-            if now_wall > wall_mark:
-                rtf = (now_robot - robot_mark) / (now_wall - wall_mark)  # robot s per wall s
-            wall_mark, robot_mark = now_wall, now_robot
-
             for i, name in enumerate(GRIPPER_JOINTS):
                 if stalled[i]:
                     continue
@@ -651,9 +607,7 @@ class PickExecutor(Node):
                 blocked = moved[i] and still[i] >= needed and target[i] - measured > lag
                 if blocked:
                     self.get_logger().info(
-                        f'{name} stalled at {measured:.3f} '
-                        f'(travel {measured - start[i]:.3f}, lag {target[i] - measured:.3f}, '
-                        f'iter {n}, rtf {rtf:.2f})')
+                        f'{name} stalled at {measured:.3f} (travel {measured - start[i]:.3f})')
                     stalled[i] = True
                     target[i] = measured + margin
                 elif target[i] >= limits[i]:
@@ -662,17 +616,9 @@ class PickExecutor(Node):
                 else:
                     target[i] = min(target[i] + step, limits[i])
 
-            self.get_logger().info(
-                f'iter {n}: measured {[round(p, 3) for p in self.finger_positions]} '
-                f'target {[round(t, 3) for t in target]} still {still} '
-                f'stalled {stalled} rtf {rtf:.2f}')
-
             self.gripper_client.send_goal_async(self.finger_goal(target, period))
             self.spin_for(period)
             if all(stalled):
-                self.get_logger().info(
-                    f'Close done after {n} iters: finger travel '
-                    f'{[round(p - s, 3) for p, s in zip(self.finger_positions, start)]}')
                 return True
         self.get_logger().error('Gripper close timed out')
         return False
@@ -700,10 +646,6 @@ class PickExecutor(Node):
         gap = float(np.linalg.norm(direction))
         self.hand_axis = direction / gap
         self.hand_centre = centre
-        self.get_logger().info(
-            f'Hand closing axis {np.round(self.hand_axis, 3).tolist()} '
-            f'centre {np.round(self.hand_centre, 3).tolist()} gap {gap:.3f} m, '
-            f'palm x {palm[0]:.3f} (tcp frame)')
 
     def extent_along(self, direction):
         """Length of the object's box projected on a unit direction."""
@@ -763,18 +705,12 @@ class PickExecutor(Node):
         return grasp
 
     def object_contacts(self, joints):
-        """Names of the robot bodies touching the object in this arm configuration."""
+        """Names of the robot bodies touching the object or the table in this arm configuration."""
         response = self.validity_at(joints)
         touched = (OBJECT_ID, SUPPORT_ID)
         return sorted({c.contact_body_2 if c.contact_body_1 in touched else c.contact_body_1
                        for c in response.contacts
                        if c.contact_body_1 in touched or c.contact_body_2 in touched})
-
-    def log_contacts(self, joints):
-        """Diagnostic: every contact pair in the current state (object contacts are allowed)."""
-        response = self.validity_at(joints)
-        pairs = sorted({(c.contact_body_1, c.contact_body_2) for c in response.contacts})
-        self.get_logger().info(f'Contact pairs before lift: {pairs}')
 
     def closed_hand_clear(self, joints):
         """Closes the fingers in MoveIt at the grasp pose `joints`, from open up to the first
@@ -819,7 +755,6 @@ class PickExecutor(Node):
         retreats = np.arange(0.0, self.extent_along(approach) / 2.0 + 1e-9,
                              self.get_parameter('retreat_step').value)
         seed = list(self.joint_positions)
-        closest = None
         for retreat in retreats:
             free = []
             for offset in offsets:
@@ -829,10 +764,7 @@ class PickExecutor(Node):
                 if joints is None:
                     free.append(False)
                     continue
-                contacts = self.object_contacts(joints)
-                free.append(not contacts)
-                if closest is None or len(contacts) < len(closest[0]):
-                    closest = (contacts, offset, retreat)
+                free.append(not self.object_contacts(joints))
             run = longest_run(free)
             if run is not None and (run[1] - run[0] + 1) * step >= self.get_parameter(
                     'min_free_width').value:
@@ -840,12 +772,6 @@ class PickExecutor(Node):
                 moved[:3, 3] += closing * (offsets[run[0]] + offsets[run[1]]) / 2.0 \
                     - approach * retreat
                 return moved, (run[1] - run[0] + 1) * step, retreat
-        if closest is None:
-            self.get_logger().info('Closest miss: no reachable hand position')
-        else:
-            contacts, offset, retreat = closest
-            self.get_logger().info(
-                f'Closest miss: {contacts} at offset {offset:+.3f} m, retreat {retreat:.3f} m')
         return None
 
     # ---------- one hand pose: place, then check, then execute ----------
@@ -897,12 +823,12 @@ class PickExecutor(Node):
         lift = self.plan_line(approach[1], goals['lift'])
         if lift is None:
             return None, 'straight lift is blocked'
-        if self.plan_joint_path(lift[1], up_joints, 'Up check') is None:
+        if self.plan_joint_path(lift[1], up_joints) is None:
             return None, 'cannot reach the up pose from the lift pose'
 
         # The planner call is the slow one, so it runs last
         self.set_contact_allowed(False)
-        pre_trajectory = self.plan_joint_path(start, joints, 'Pre-grasp')
+        pre_trajectory = self.plan_joint_path(start, joints)
         if pre_trajectory is None:
             return None, 'no collision-free path to the pre-grasp'
         return {'goals': goals, 'pre_trajectory': pre_trajectory}, None
@@ -933,8 +859,6 @@ class PickExecutor(Node):
         for joints in solutions:
             plan, reason = self.check_branch(joints, goals)
             if plan is not None:
-                self.get_logger().info(
-                    f'Hand pose accepted ({len(solutions)} pre-grasp solutions found)')
                 return plan
             self.reject(reason)
         return None
@@ -954,23 +878,15 @@ class PickExecutor(Node):
         if not self.close_until_contact():
             raise RuntimeError('Close gripper failed')
 
-        for frame in (*self.get_parameter('hand_pair_frames').value,
-                      self.get_parameter('hand_opposing_frame').value):
-            p = lookup_matrix(self.tf_buffer, self.frame_id, frame)[:3, 3] - self.object_centre
-            self.get_logger().info(f'{frame} vs object centre: {np.round(p, 3).tolist()}')
-
-        self.log_contacts(self.joint_positions)
         self.get_logger().info('Lift')
         self.line_move(goals['lift'], 'Lift')
-        self.get_logger().info(f'Fingers after lift: {np.round(self.finger_positions, 3).tolist()}')
 
         self.get_logger().info('Up')
         self.spin_for(0.3)
         up = self.plan_joint_path(
-            list(self.joint_positions), self.get_parameter('up_joints').value, 'Up')
+            list(self.joint_positions), self.get_parameter('up_joints').value)
         if up is None or not self.execute_trajectory(up):
             raise RuntimeError('Up move failed')
-        self.get_logger().info(f'Fingers after up: {np.round(self.finger_positions, 3).tolist()}')
 
     # ---------- sequence ----------
 
@@ -1036,21 +952,11 @@ class PickExecutor(Node):
         self.get_logger().info(f'{len(placed)} of {len(tried)} hand poses fit around the object')
 
         # Phase 2: best placement first, execute the first one whose whole pick is feasible
-        base = self.object_centre[2] - self.object_size[2] / 2.0
         for offset, rank, grasp, width, retreat in placed:
             label = 'top-down fallback' if rank == len(proposals) else f'{rank}/{len(proposals)}'
-            centre = grasp[:3, 3] + grasp[:3, :3] @ self.hand_centre
             self.get_logger().info(
-                f'Proposal {label}: closing centre {offset:.2f} of the half-diagonal '
-                'from the centroid')
-            self.get_logger().info(
-                f'Closing centre {centre[2] - base:.3f} m above the object base '
-                f'(object height {self.object_size[2]:.3f} m)')
-            self.get_logger().info(
-                f'Approach z {grasp[2, 0]:+.2f}, '
-                f'closing axis z {(grasp[:3, :3] @ self.hand_axis)[2]:+.2f}')
-            self.get_logger().info(
-                f'Hand envelopes the object: {width:.3f} m free across, backed off {retreat:.3f} m')
+                f'Proposal {label}: closing centre {offset:.2f} of the half-diagonal from the '
+                f'centroid, {width:.3f} m free across, backed off {retreat:.3f} m')
             try:
                 plan = self.plan_pick(grasp)
                 if plan is None:
