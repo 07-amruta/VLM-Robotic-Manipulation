@@ -152,6 +152,18 @@ ros2 launch ur10_gripper_moveit_config moveit_real.launch.py
 ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10 robot_ip:=192.168.1.102 launch_rviz:=true
 ```
 
+* Real Hardware Dry Run
+
+```bash
+DRY_RUN=1 HARDWARE_MODE=real ros2 run grasp_pick_and_place run_pick
+```
+
+* Real Hardware Run
+
+```bash
+HARDWARE_MODE=real ros2 run grasp_pick_and_place run_pick
+```
+
 
 * To rest position of cylinder in Gazebo
 

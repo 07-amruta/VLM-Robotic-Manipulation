@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 from shape_msgs.msg import SolidPrimitive
 
 from grasp_pick_and_place.config import OBJECT_ID, SUPPORT_ID
-from grasp_pick_and_place.geometry import fit_box, is_dome, top_slice
+from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, top_slice
 
 
 class SceneMixin:
@@ -66,7 +66,7 @@ class SceneMixin:
         fraction = self.get_parameter('dome_slice').value
         centre, size, yaw, fill = fit_box(
             points, margin, self.get_parameter('support_top').value)
-        self.round_object = fill < self.get_parameter('prismatic_fill').value
+        self.round_object, rect_res, ellipse_res = is_round(points, yaw)
         self.sphere = self.round_object and is_dome(
             points, fraction, self.get_parameter('dome_ratio').value)
         if self.sphere:
@@ -112,7 +112,7 @@ class SceneMixin:
         self.get_logger().info(
             f'Object {shape} size {np.round(size, 3).tolist()} '
             f'centre {np.round(centre, 3).tolist()} yaw {np.rad2deg(yaw):.0f} deg, '
-            f'footprint fill {fill:.2f}')
+            f'footprint fill {fill:.2f} rect {rect_res:.3f} ellipse {ellipse_res:.3f}')
 
     def add_support(self):
         """Adds the table as a block on the floor up to the support_top height."""

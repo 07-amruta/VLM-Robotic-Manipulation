@@ -28,6 +28,19 @@ def fit_box(points, margin, base=None):
     size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
     return centre, size, yaw, fill
 
+def is_round(points, yaw):
+    """True when the hull follows the ellipse inscribed in the oriented box better than the box outline."""
+    xy = points[:, :2]
+    c, s = np.cos(yaw), np.sin(yaw)
+    local = xy @ np.array([[c, -s], [s, c]])
+    hull = local[ConvexHull(xy).vertices]
+    t = np.linspace(0.0, 1.0, 20, endpoint=False)[None, :, None]
+    edge = (hull[:, None, :] * (1 - t) + np.roll(hull, -1, axis=0)[:, None, :] * t).reshape(-1, 2)
+    low, high = local.min(axis=0), local.max(axis=0)
+    u, v = (2.0 * (edge - (low + high) / 2.0) / (high - low)).T
+    rect = np.abs(np.maximum(abs(u), abs(v)) - 1.0).mean()
+    ellipse = np.abs(np.hypot(u, v) - 1.0).mean()
+    return ellipse < rect, rect, ellipse
 
 def top_slice(points, fraction):
     """Points in the highest `fraction` of the cloud's height."""

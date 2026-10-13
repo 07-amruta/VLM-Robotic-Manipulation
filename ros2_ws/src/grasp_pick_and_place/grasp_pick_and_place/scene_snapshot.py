@@ -71,6 +71,7 @@ class SceneSnapshot(Node):
         self.declare_parameter('plane_iters', 200)
         self.declare_parameter('cluster_radius', 0.015)
         self.declare_parameter('edge_tol', 0.01)
+        self.declare_parameter('support_z', float('nan'))  # nan = off (sim unchanged)
 
         self.depth_msg = None
         self.info_msg = None
@@ -152,6 +153,14 @@ class SceneSnapshot(Node):
             return response
         n, d = fit_plane(points, self.get_parameter('plane_iters').value,
                         self.get_parameter('plane_tol').value)
+        tol = self.get_parameter('plane_tol').value
+        plane_z = points[np.abs(points @ n + d) < tol][:, 2].mean()
+        support_z = self.get_parameter('support_z').value
+        self.get_logger().info(f'plane n={np.round(n, 3).tolist()} z={plane_z:.3f}')
+        if not np.isnan(support_z):
+            shift = plane_z - support_z
+            points[:, 2] -= shift
+            d += n[2] * shift
         points = points[points @ n + d > self.get_parameter('plane_margin').value]
 
         if points.shape[0] == 0:

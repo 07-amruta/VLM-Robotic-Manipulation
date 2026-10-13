@@ -144,6 +144,7 @@ CAMERAS = {
         'optical_frame': 'camera_depth_optical_frame',
         'depth_min': 0.0,
         'depth_max': 2.0,
+        'support_z': 0.07,  # measured table top height
         **CROP,
     },
 }

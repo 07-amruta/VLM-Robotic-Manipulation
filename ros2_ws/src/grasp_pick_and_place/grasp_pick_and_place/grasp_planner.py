@@ -28,8 +28,12 @@ class GraspPlannerMixin:
             if length < 1e-3:  # face normal parallel to the approach: no closing direction here
                 continue
             target /= length
+            if self.extent_along(target) > self.hand_gap:  # object too wide to straddle
+                continue
             turns.append(np.arctan2(approach @ np.cross(closing, target), closing @ target))
 
+        if not turns:
+            return []
         snap = min(turns, key=abs)
         if self.round_object:
             # Every horizontal direction is a "face" of an upright round object: close level
@@ -110,15 +114,18 @@ class GraspPlannerMixin:
                              self.get_parameter('retreat_step').value)
         seed = list(self.joint_positions)
         for retreat in retreats:
-            free = []
+            free, why = [], []
             for offset in offsets:
                 moved = grasp.copy()
                 moved[:3, 3] += closing * offset - approach * retreat
                 joints = self.solve_ik(moved, seed, avoid_collisions=False)
                 if joints is None:
                     free.append(False)
+                    why.append('ik')
                     continue
-                free.append(not self.object_contacts(joints))
+                hit = self.object_contacts(joints)
+                free.append(not hit)
+                why.append(','.join(hit) if hit else 'free')
             run = longest_run(free)
             if run is not None and (run[1] - run[0] + 1) * step >= self.get_parameter(
                     'min_free_width').value:

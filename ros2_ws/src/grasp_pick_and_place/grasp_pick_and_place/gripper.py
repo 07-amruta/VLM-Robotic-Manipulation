@@ -94,6 +94,7 @@ class GripperMixin:
         direction = pair - opposing
         centre[0] = direction[0] = 0.0  # x is the approach axis of the grasp frame
         gap = float(np.linalg.norm(direction))
+        self.hand_gap = gap
         self.get_logger().info(f'hand gap {gap:.3f}')
         self.hand_axis = direction / gap
         self.hand_centre = centre
