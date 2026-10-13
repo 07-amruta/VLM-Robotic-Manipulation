@@ -30,7 +30,7 @@ class GripperMixin:
             return False
         return True
 
-    def close_until_contact(self):
+    def close_gripper(self):
         step = self.get_parameter('close_step').value
         period = self.get_parameter('close_period').value
         limits = list(self.get_parameter('close_limit').value)

@@ -10,12 +10,13 @@ from tf2_ros import TransformException
 
 import numpy as np
 
+from grasp_pick_and_place.config import (
+    CAMERA, HARDWARE_MODE, MANUAL_SCENE, SAFETY, SCENE, SCENE_SOURCE)
 from grasp_pick_and_place.geometry import is_similar
 from grasp_pick_and_place.pick_executor import PickExecutor
 from grasp_pick_and_place.transform_utils import lookup_matrix, pose_to_matrix
 
 PKG = 'grasp_pick_and_place'
-BACKGROUND_NODES = ['scene_snapshot', 'grasp_proposer']
 CAPTURE_SRV = '/capture_scene'
 POSE_TOPIC = '/grasp_pose'
 READY_TIMEOUT = 120.0
@@ -23,10 +24,23 @@ POSE_TIMEOUT = 20.0  # per capture attempt
 CAPTURE_ATTEMPTS = 3
 
 
+def background_nodes():
+    """Nodes started with the sequence: the scene source."""
+    if SCENE_SOURCE == 'manual':
+        return {'manual_scene': {**MANUAL_SCENE, 'support_top': SCENE['support_top']}}
+    return {'scene_snapshot': CAMERA,
+            'grasp_proposer': {'optical_frame': CAMERA['optical_frame']}}
+
+
 # ---------- process helpers ----------
 
-def start(executable):
-    return subprocess.Popen(['ros2', 'run', PKG, executable], start_new_session=True)
+def start(executable, params):
+    command = ['ros2', 'run', PKG, executable]
+    if params:
+        command += ['--ros-args']
+        for name, value in params.items():
+            command += ['-p', f'{name}:={value}']
+    return subprocess.Popen(command, start_new_session=True)
 
 
 def stop(proc):
@@ -52,7 +66,7 @@ def spin_until(node, condition, timeout):
 # ---------- sequence steps ----------
 
 def capture_scene(robot):
-    """Triggers scene_snapshot until grasp_proposer publishes a pose."""
+    """Triggers the scene source until a grasp pose is published."""
     client = robot.create_client(Trigger, CAPTURE_SRV)
     if not spin_until(robot, client.service_is_ready, READY_TIMEOUT):
         raise RuntimeError(f'{CAPTURE_SRV} not available')
@@ -125,30 +139,55 @@ def place_all(robot):
     return placed, len(proposals)
 
 
+def confirm_stage(label):
+    """Operator gate before one stage of the pick (real hardware)."""
+    if SAFETY['confirm_each_stage'] and input(
+            f'{label}: y to run, anything else aborts ').strip().lower() != 'y':
+        raise RuntimeError(f'{label} declined')
+
+
 def execute_pick(robot, plan):
     goals = plan['goals']
 
     robot.set_contact_allowed(False)
+    confirm_stage('Pre-grasp')
     robot.get_logger().info('Pre-grasp')
     if not robot.execute_trajectory(plan['pre_trajectory']):
         raise RuntimeError('Pre-grasp failed')
+    confirm_stage('Approach')
     robot.get_logger().info('Approach')
     robot.line_move(goals['grasp'], 'Approach')
 
     robot.set_contact_allowed(True)
+    confirm_stage('Close gripper')
     robot.get_logger().info('Close gripper')
-    if not robot.close_until_contact():
+    if not robot.close_gripper():
         raise RuntimeError('Close gripper failed')
 
+    confirm_stage('Lift')
     robot.get_logger().info('Lift')
     robot.line_move(goals['lift'], 'Lift')
 
+    confirm_stage('Up')
     robot.get_logger().info('Up')
     robot.spin_for(0.3)
     up = robot.plan_joint_path(
         list(robot.joint_positions), robot.get_parameter('up_joints').value)
     if up is None or not robot.execute_trajectory(up):
         raise RuntimeError('Up move failed')
+
+
+def approve(robot, grasp):
+    """Safety gate before any arm motion. Returns True only if execution is allowed."""
+    robot.get_logger().info(
+        f'Planned pick at {np.round(grasp[:3, 3], 3).tolist()} in {robot.frame_id}')
+    if SAFETY['dry_run']:
+        robot.get_logger().info('Dry run: plan found, not executing')
+        return False
+    if SAFETY['confirm_execution'] and input('Execute? [y/N] ').strip().lower() != 'y':
+        robot.get_logger().info('Execution declined')
+        return False
+    return True
 
 
 def pick(robot, placed, proposal_count):
@@ -161,6 +200,8 @@ def pick(robot, placed, proposal_count):
         plan = robot.plan_pick(grasp)
         if plan is None:
             continue
+        if not approve(robot, grasp):
+            return
         execute_pick(robot, plan)
         robot.get_logger().info('Pick complete')
         return
@@ -176,9 +217,10 @@ def main():
     background = []
     robot = None
     try:
-        robot_log = rclpy.logging.get_logger('run_pick')
-        robot_log.info('Starting ' + ' and '.join(BACKGROUND_NODES))
-        background = [start(name) for name in BACKGROUND_NODES]
+        nodes = background_nodes()
+        rclpy.logging.get_logger('run_pick').info(
+            f'{HARDWARE_MODE} / {SCENE_SOURCE}: starting ' + ' and '.join(nodes))
+        background = [start(name, params) for name, params in nodes.items()]
 
         robot = PickExecutor()
         capture_scene(robot)

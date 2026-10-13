@@ -11,6 +11,11 @@ from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
+from grasp_pick_and_place.projection import deproject, depth_to_metres, transform_points
+from scipy.spatial import cKDTree
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
+from scipy.ndimage import maximum_filter, minimum_filter
 
 
 def quaternion_to_matrix(x, y, z, w):
@@ -20,6 +25,32 @@ def quaternion_to_matrix(x, y, z, w):
         [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
     ])
 
+def fit_plane(points, iters, tol):
+    """RANSAC dominant plane; returns unit normal (z >= 0) and offset d, with n.p + d = 0."""
+    rng = np.random.default_rng()
+    best = None
+    for _ in range(iters):
+        s = points[rng.choice(len(points), 3, replace=False)]
+        n = np.cross(s[1] - s[0], s[2] - s[0])
+        norm = np.linalg.norm(n)
+        if norm < 1e-9:
+            continue
+        n /= norm
+        if n[2] < 0:
+            n = -n
+        d = -n @ s[0]
+        count = (np.abs(points @ n + d) < tol).sum()
+        if best is None or count > best[0]:
+            best = (count, n, d)
+    return best[1], best[2]
+
+def largest_cluster(points, radius):
+    """Largest connected component, linking points closer than `radius`."""
+    pairs = cKDTree(points).query_pairs(radius, output_type='ndarray')
+    n = len(points)
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(n, n))
+    _, labels = connected_components(graph, directed=False)
+    return points[labels == np.bincount(labels).argmax()]
 
 class SceneSnapshot(Node):
     """On request, deprojects the latest depth image into the target frame and crops it to the workspace."""
@@ -27,12 +58,19 @@ class SceneSnapshot(Node):
     def __init__(self):
         super().__init__('scene_snapshot')
 
-        self.declare_parameter('depth_topic', '/scene_camera/depth_image')
-        self.declare_parameter('camera_info_topic', '/scene_camera/camera_info')
-        self.declare_parameter('optical_frame', 'scene_camera_optical')
+        self.declare_parameter('depth_topic', '/camera/camera/depth/image_rect_raw')
+        self.declare_parameter('camera_info_topic', '/camera/camera/depth/camera_info')
+        self.declare_parameter('optical_frame', 'camera_depth_optical_frame')
+        self.declare_parameter('depth_min', 0.0)
+        self.declare_parameter('depth_max', 100.0)
         self.declare_parameter('target_frame', 'base_link')
-        self.declare_parameter('crop_min', [-0.4, 0.45, 0.31])
-        self.declare_parameter('crop_max', [0.4, 1.05, 0.8])
+        self.declare_parameter('crop_min', [-0.335, 0.518, 0.445])
+        self.declare_parameter('crop_max', [-0.195, 0.658, 0.586])
+        self.declare_parameter('plane_tol', 0.008)
+        self.declare_parameter('plane_margin', 0.015)
+        self.declare_parameter('plane_iters', 200)
+        self.declare_parameter('cluster_radius', 0.015)
+        self.declare_parameter('edge_tol', 0.01)
 
         self.depth_msg = None
         self.info_msg = None
@@ -68,9 +106,12 @@ class SceneSnapshot(Node):
             return response
 
         depth_msg, info = self.depth_msg, self.info_msg
-        if depth_msg.encoding != '32FC1':
+        try:
+            depth = depth_to_metres(
+                depth_msg.data, depth_msg.encoding, depth_msg.height, depth_msg.width)
+        except ValueError as e:
             response.success = False
-            response.message = f'Unsupported depth encoding: {depth_msg.encoding}'
+            response.message = str(e)
             return response
 
         target_frame = self.get_parameter('target_frame').value
@@ -82,27 +123,42 @@ class SceneSnapshot(Node):
             response.message = f'TF lookup failed: {e}'
             return response
 
-        # Deproject: pixel (u, v) with depth z -> optical-frame point (x right, y down, z forward)
-        depth = np.frombuffer(depth_msg.data, dtype=np.float32).reshape(
-            depth_msg.height, depth_msg.width)
-        fx, fy, cx, cy = info.k[0], info.k[4], info.k[2], info.k[5]
-        v, u = np.indices(depth.shape)
-        valid = np.isfinite(depth) & (depth > 0.0)
-        z = depth[valid]
-        x = (u[valid] - cx) * z / fx
-        y = (v[valid] - cy) * z / fy
-        points = np.stack((x, y, z), axis=1)
+        # Drop returns outside the camera's valid range (e.g. sentinel values)
+        depth_lo, depth_hi = self.get_parameter('depth_min').value, self.get_parameter('depth_max').value
+        depth = np.where((depth >= depth_lo) & (depth <= depth_hi), depth, 0.0)
 
-        # Optical frame -> target frame
+        # Drop depth-edge pixels (stereo edge smear): large depth jump inside the 3x3 neighbourhood
+        valid = depth > 0
+        hi = maximum_filter(depth, size=3)
+        lo = minimum_filter(np.where(valid, depth, np.inf), size=3)
+        depth = np.where(valid & (hi - lo <= self.get_parameter('edge_tol').value), depth, 0.0)
+
+        # Deproject to the optical frame (x right, y down, z forward), then to the target frame
+        points, _ = deproject(depth, np.array(info.k).reshape(3, 3))
         t = tf.transform.translation
         q = tf.transform.rotation
-        rot = quaternion_to_matrix(q.x, q.y, q.z, q.w)
-        points = points @ rot.T + np.array([t.x, t.y, t.z])
+        matrix = np.eye(4)
+        matrix[:3, :3] = quaternion_to_matrix(q.x, q.y, q.z, q.w)
+        matrix[:3, 3] = [t.x, t.y, t.z]
+        points = transform_points(points, matrix)
 
         # Crop to the workspace box
         lo = np.array(self.get_parameter('crop_min').value)
         hi = np.array(self.get_parameter('crop_max').value)
         points = points[np.all((points >= lo) & (points <= hi), axis=1)]
+        if points.shape[0] < 3:
+            response.success = False
+            response.message = 'Too few points in crop'
+            return response
+        n, d = fit_plane(points, self.get_parameter('plane_iters').value,
+                        self.get_parameter('plane_tol').value)
+        points = points[points @ n + d > self.get_parameter('plane_margin').value]
+
+        if points.shape[0] == 0:
+            response.success = False
+            response.message = 'No points above support plane'
+            return response
+        points = largest_cluster(points, self.get_parameter('cluster_radius').value)
 
         cloud = PointCloud2()
         cloud.header.stamp = depth_msg.header.stamp

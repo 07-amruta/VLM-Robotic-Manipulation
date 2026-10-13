@@ -28,6 +28,8 @@ setup(
             'grasp_proposer = grasp_pick_and_place.grasp_proposer:main',
             'pick_executor = grasp_pick_and_place.pick_executor:main',
             'run_pick = grasp_pick_and_place.run_pick:main',
+            'manual_scene = grasp_pick_and_place.manual_scene:main',
+            'gripper_state_publisher = grasp_pick_and_place.gripper_state_publisher:main',
         ],
     },
 )

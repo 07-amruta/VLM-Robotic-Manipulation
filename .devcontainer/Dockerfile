@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     ros-humble-ros2-control \
     ros-humble-ros2-controllers \
     ros-humble-controller-manager \
+    ros-humble-rmw-cyclonedds-cpp \
     && rm -rf /var/lib/apt/lists/*
 
 # MoveIt 2
@@ -180,7 +181,41 @@ RUN mkdir -p /root/.bash_history_dir && \
     echo 'export HISTFILE=/root/.bash_history_dir/.bash_history' >> /etc/bash.bashrc && \
     echo 'export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"' >> /etc/bash.bashrc
 
+# RealSense: librealsense from source with the libusb (RSUSB) backend, no kernel patching.
+# Verify flags against Intel's Jetson install doc (doc/installation_jetson.md) and the tag
+# against the realsense-ros README compatibility table.
+ARG LIBRS_TAG=v2.55.1
+ARG REALSENSE_ROS_TAG=4.55.1
+RUN apt-get update && apt-get install -y \
+    libusb-1.0-0-dev libssl-dev libudev-dev pkg-config usbutils \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --branch ${LIBRS_TAG} --depth 1 https://github.com/IntelRealSense/librealsense.git /opt/librealsense && \
+    cmake -S /opt/librealsense -B /opt/librealsense/build \
+        -DCMAKE_BUILD_TYPE=Release -DFORCE_RSUSB_BACKEND=ON \
+        -DBUILD_EXAMPLES=OFF -DBUILD_GRAPHICAL_EXAMPLES=OFF && \
+    cmake --build /opt/librealsense/build -j$(nproc) && \
+    cmake --install /opt/librealsense/build && ldconfig
+
+# realsense-ros (built into the image, not the workspace)
+RUN mkdir -p /opt/realsense_ws/src && \
+    git clone --branch ${REALSENSE_ROS_TAG} --depth 1 \
+        https://github.com/IntelRealSense/realsense-ros.git /opt/realsense_ws/src/realsense-ros
+RUN . /opt/ros/humble/setup.sh && cd /opt/realsense_ws && \
+    apt-get update && \
+    rosdep install -i --from-path src --rosdistro humble --skip-keys=librealsense2 -y && \
+    rm -rf /var/lib/apt/lists/* && \
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+RUN echo "source /opt/realsense_ws/install/setup.bash" >> /etc/bash.bashrc
+
+# Perception (YOLO11-seg). Fails the build if pip replaced the Jetson torch wheel.
+RUN pip3 install --no-cache-dir ultralytics
+RUN python3 -c "import torch; assert torch.__version__.startswith('2.11.0'), torch.__version__"
+
+# Last: keep pip's CUDA 12.9 cuBLAS from shadowing JetPack's, whatever got installed above
+RUN pip3 uninstall -y nvidia-cublas-cu12
+
 # Default working directory
 WORKDIR /workspaces
 
 ENV GRASPNET_ROOT=/opt/graspnet-baseline
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp

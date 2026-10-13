@@ -16,7 +16,7 @@ from rclpy.time import Time
 from sensor_msgs.msg import JointState, PointCloud2
 from tf2_ros import Buffer, TransformListener
 
-from grasp_pick_and_place.config import ARM_JOINTS, GRIPPER_JOINTS, PARAMS
+from grasp_pick_and_place.config import ARM_JOINTS, GRIPPER_JOINTS, HARDWARE_MODE, PARAMS
 
 
 class RobotIO(Node):
@@ -61,8 +61,10 @@ class RobotIO(Node):
 
         self.move_group_client = ActionClient(self, MoveGroup, '/move_action')
         self.execute_client = ActionClient(self, ExecuteTrajectory, '/execute_trajectory')
-        self.gripper_client = ActionClient(
-            self, FollowJointTrajectory, '/gripper_controller/follow_joint_trajectory')
+        # The real gripper is driven over Modbus, not through a controller
+        if HARDWARE_MODE != 'real':
+            self.gripper_client = ActionClient(
+                self, FollowJointTrajectory, '/gripper_controller/follow_joint_trajectory')
         self.ik_client = self.create_client(GetPositionIK, '/compute_ik')
         self.cartesian_client = self.create_client(GetCartesianPath, '/compute_cartesian_path')
         self.get_scene_client = self.create_client(GetPlanningScene, '/get_planning_scene')
@@ -74,7 +76,8 @@ class RobotIO(Node):
         self.get_logger().info('Waiting for MoveIt 2 and gripper interfaces...')
         self.move_group_client.wait_for_server()
         self.execute_client.wait_for_server()
-        self.gripper_client.wait_for_server()
+        if HARDWARE_MODE != 'real':
+            self.gripper_client.wait_for_server()
         self.ik_client.wait_for_service()
         self.cartesian_client.wait_for_service()
         self.get_scene_client.wait_for_service()

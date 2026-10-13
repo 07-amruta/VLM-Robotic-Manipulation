@@ -140,6 +140,18 @@ colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_
 ```bash
 ros2 launch robot_bringup bringup.launch.py
 ```
+* For Real UR10 arm Moveit Launch in container
+
+```bash
+ros2 launch ur10_gripper_moveit_config moveit_real.launch.py
+```
+
+* For Real UR10 arm Driver Launch in host
+
+```bash
+ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10 robot_ip:=192.168.1.102 launch_rviz:=true
+```
+
 
 * To rest position of cylinder in Gazebo
 
