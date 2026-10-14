@@ -66,8 +66,11 @@ class GraspPlannerMixin:
         """Names of the robot bodies touching the object or the table in this arm configuration."""
         response = self.validity_at(joints)
         touched = (OBJECT_ID, SUPPORT_ID)
-        return sorted({c.contact_body_2 if c.contact_body_1 in touched else c.contact_body_1
-                       for c in response.contacts
+        def tag(c):
+            other = c.contact_body_2 if c.contact_body_1 in touched else c.contact_body_1
+            hit = c.contact_body_1 if c.contact_body_1 in touched else c.contact_body_2
+            return f'{other.replace("gripper_", "")}>{"T" if hit == SUPPORT_ID else "O"}'
+        return sorted({tag(c) for c in response.contacts
                        if c.contact_body_1 in touched or c.contact_body_2 in touched})
 
     def closed_hand_clear(self, joints):
@@ -103,29 +106,30 @@ class GraspPlannerMixin:
 
     def find_envelope(self, grasp):
         """Slides the open hand across its closing axis, backing off along the approach (at most
-        to the object's near surface) if needed, to where it touches nothing.
+        the object's full extent along it) to the deepest position where it touches nothing.
         Returns (pose, free_width, retreat) or None."""
         step = self.get_parameter('search_step').value
         reach = self.get_parameter('search_reach').value
         offsets = np.arange(-reach, reach + 1e-9, step)
         closing = grasp[:3, :3] @ self.hand_axis
         approach = grasp[:3, 0]
-        retreats = np.arange(0.0, self.extent_along(approach) / 2.0 + 1e-9,
+        retreats = np.arange(0.0, self.extent_along(approach) + 1e-9,
                              self.get_parameter('retreat_step').value)
         seed = list(self.joint_positions)
+        touched = set()
         for retreat in retreats:
-            free, why = [], []
+            free, touched = [], set()
             for offset in offsets:
                 moved = grasp.copy()
                 moved[:3, 3] += closing * offset - approach * retreat
                 joints = self.solve_ik(moved, seed, avoid_collisions=False)
                 if joints is None:
                     free.append(False)
-                    why.append('ik')
+                    touched.add('ik')
                     continue
                 hit = self.object_contacts(joints)
                 free.append(not hit)
-                why.append(','.join(hit) if hit else 'free')
+                touched.update(hit)
             run = longest_run(free)
             if run is not None and (run[1] - run[0] + 1) * step >= self.get_parameter(
                     'min_free_width').value:
@@ -133,6 +137,7 @@ class GraspPlannerMixin:
                 moved[:3, 3] += closing * (offsets[run[0]] + offsets[run[1]]) / 2.0 \
                     - approach * retreat
                 return moved, (run[1] - run[0] + 1) * step, retreat
+        self.get_logger().info(f'hand search: touched at highest retreat: {sorted(touched)}')
         return None
 
     def targets(self, grasp):

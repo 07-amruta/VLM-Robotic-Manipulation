@@ -76,7 +76,7 @@ class GraspProposer(Node):
         # Drop grasps whose approach points upward (z component of the approach above this).
         # 0.0 keeps horizontal and downward approaches; the executor ranks them by reachability
         # and by how close the hand can close to the object's centre.
-        self.declare_parameter('max_approach_z', -0.7)
+        self.declare_parameter('max_approach_z', -0.5)
         # Drop grasps centred lower than this above the object's lowest point (the table).
         self.declare_parameter('min_grasp_height', 0.02)
         self.declare_parameter('num_candidates', 30)
@@ -140,8 +140,13 @@ class GraspProposer(Node):
         rotations = rot @ grasps.rotation_matrices
         positions = grasps.translations @ rot.T + base_from_optical[:3, 3]
 
-        keep = rotations[:, 2, 0] <= self.get_parameter('max_approach_z').value
-        keep &= positions[:, 2] >= points[:, 2].min() + self.get_parameter('min_grasp_height').value
+        steep = rotations[:, 2, 0] <= self.get_parameter('max_approach_z').value
+        high = positions[:, 2] >= points[:, 2].min() + self.get_parameter('min_grasp_height').value
+        self.get_logger().info(
+            f'grasps {len(positions)}: steep {steep.sum()}, high {high.sum()}, both {(steep & high).sum()}, '
+            f'min approach_z {rotations[:, 2, 0].min():.2f}, z range '
+            f'{positions[:, 2].min():.3f}..{positions[:, 2].max():.3f}, cloud z min {points[:, 2].min():.3f}')
+        keep = steep & high
         if not keep.any():
             self.get_logger().warn('No grasp passed the approach/height filter')
             return
@@ -176,6 +181,9 @@ def main():
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
+    except RuntimeError:
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_node()
         if rclpy.ok():

@@ -108,7 +108,7 @@ def prepare(robot):
     robot.tcp_to_link = np.linalg.inv(link_from_tcp)
 
     # Open first: the hand geometry must be measured with the fingers open
-    if not robot.move_gripper(robot.get_parameter('gripper_open').value):
+    if not robot.ensure_open():
         raise RuntimeError('Could not open the gripper')
     robot.spin_for(0.5)
 
@@ -161,7 +161,7 @@ def execute_pick(robot, plan):
     robot.set_contact_allowed(True)
     confirm_stage('Close gripper')
     robot.get_logger().info('Close gripper')
-    if not robot.close_gripper():
+    if not robot.ensure_closed():
         raise RuntimeError('Close gripper failed')
 
     confirm_stage('Lift')

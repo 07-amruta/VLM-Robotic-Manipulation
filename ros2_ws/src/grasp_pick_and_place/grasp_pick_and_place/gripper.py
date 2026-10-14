@@ -98,3 +98,9 @@ class GripperMixin:
         self.get_logger().info(f'hand gap {gap:.3f}')
         self.hand_axis = direction / gap
         self.hand_centre = centre
+
+    def ensure_open(self):
+        return self.move_gripper(self.get_parameter('gripper_open').value)
+
+    def ensure_closed(self):
+        return self.move_gripper(self.get_parameter('gripper_closed').value)

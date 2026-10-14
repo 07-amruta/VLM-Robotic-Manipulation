@@ -123,6 +123,8 @@ GRIPPER_REAL = {
     'gripper_force': 6,           # 0-255; set from the force sweep
     'gripper_min_contacts': 3,    # fingers in closing contact that count as held
     'gripper_settle_timeout': 5.0,
+    'gripper_open_tolerance': 10,
+    'gripper_closed_tolerance':20,
 }
 PARAMS = {**ROBOT, **MOTION, **GRIPPER, **SCENE, **SHAPE, **SEARCH, **GRIPPER_REAL}
 
