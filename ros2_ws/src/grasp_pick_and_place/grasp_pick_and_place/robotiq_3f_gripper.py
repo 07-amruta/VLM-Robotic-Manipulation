@@ -121,7 +121,10 @@ class RobotiqGripper3F:
             try:
                 self._connect()
                 self._sock.sendall(frame)
-                return self._sock.recv(256)
+                data = self._sock.recv(256)
+                if not data:
+                    raise ConnectionError('gripper closed the connection')
+                return data
             except Exception as exc:
                 last_exc = exc
                 self._disconnect()

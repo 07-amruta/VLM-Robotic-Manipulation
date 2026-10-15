@@ -114,8 +114,8 @@ def generate_launch_description():
     camera_tf = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
-        arguments=["0.49612", "1.43383", "0.95801", "-0.409896", "-0.187347", "0.828393",
-                   "-0.332642", "base_link", "camera_link"],
+        arguments=["0.56772", "1.43292", "0.94878", "-0.439983", "-0.126562", "0.850905",
+                   "-0.257601", "base_link", "camera_link"],
     )
 
     return LaunchDescription([

@@ -161,7 +161,7 @@ def execute_pick(robot, plan):
     robot.set_contact_allowed(True)
     confirm_stage('Close gripper')
     robot.get_logger().info('Close gripper')
-    if not robot.ensure_closed():
+    if not robot.close_gripper():
         raise RuntimeError('Close gripper failed')
 
     confirm_stage('Lift')

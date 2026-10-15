@@ -1,4 +1,5 @@
 import numpy as np
+import time as _t
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import (
@@ -136,12 +137,13 @@ class SceneSnapshot(Node):
 
         # Deproject to the optical frame (x right, y down, z forward), then to the target frame
         points, _ = deproject(depth, np.array(info.k).reshape(3, 3))
+        np.save(f'/tmp/optical_{_t.time_ns()}.npy', points.astype(np.float32))  # temporary
         t = tf.transform.translation
         q = tf.transform.rotation
         matrix = np.eye(4)
         matrix[:3, :3] = quaternion_to_matrix(q.x, q.y, q.z, q.w)
         matrix[:3, 3] = [t.x, t.y, t.z]
-        points = transform_points(points, matrix)
+        points = transform_points(points, matrix)        
 
         # Crop to the workspace box
         lo = np.array(self.get_parameter('crop_min').value)
@@ -151,18 +153,16 @@ class SceneSnapshot(Node):
             response.success = False
             response.message = 'Too few points in crop'
             return response
-        n, d = fit_plane(points, self.get_parameter('plane_iters').value,
-                        self.get_parameter('plane_tol').value)
-        tol = self.get_parameter('plane_tol').value
-        plane_z = points[np.abs(points @ n + d) < tol][:, 2].mean()
         support_z = self.get_parameter('support_z').value
-        self.get_logger().info(f'plane n={np.round(n, 3).tolist()} z={plane_z:.3f}')
-        if not np.isnan(support_z):
-            shift = plane_z - support_z
-            points[:, 2] -= shift
-            d += n[2] * shift
+        if np.isnan(support_z):
+            n, d = fit_plane(points, self.get_parameter('plane_iters').value,
+                             self.get_parameter('plane_tol').value)
+            tol = self.get_parameter('plane_tol').value
+            plane_z = points[np.abs(points @ n + d) < tol][:, 2].mean()
+            self.get_logger().info(f'plane n={np.round(n, 3).tolist()} z={plane_z:.3f}')
+        else:  # calibrated, levelled frame: the table is the plane z = support_z
+            n, d = np.array([0.0, 0.0, 1.0]), -float(support_z)
         points = points[points @ n + d > self.get_parameter('plane_margin').value]
-
         if points.shape[0] == 0:
             response.success = False
             response.message = 'No points above support plane'

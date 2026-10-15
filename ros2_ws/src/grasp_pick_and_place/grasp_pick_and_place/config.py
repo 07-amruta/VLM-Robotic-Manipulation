@@ -59,6 +59,7 @@ GRIPPER = {
     'hand_pair_frames': ['gripper_finger_1_link_3', 'gripper_finger_2_link_3'],
     'hand_opposing_frame': 'gripper_finger_middle_link_3',
     'hand_palm_frame': 'gripper_palm',
+    'hand_centre_depth': 0.0 if HARDWARE_MODE == 'sim' else 0.10,  # m, tcp -> pad midpoint along approach; measured on real
 }
 
 # Table block per hardware. Real values (base_link frame, metres) must be measured.
