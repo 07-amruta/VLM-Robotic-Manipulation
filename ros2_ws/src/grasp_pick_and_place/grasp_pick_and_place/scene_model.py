@@ -10,7 +10,7 @@ from rcl_interfaces.srv import GetParameters
 from scipy.spatial.transform import Rotation
 from shape_msgs.msg import SolidPrimitive
 
-from grasp_pick_and_place.config import OBJECT_ID, SUPPORT_ID
+from grasp_pick_and_place.config import FLOOR_ID, OBJECT_ID, SUPPORT_ID
 from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, top_slice
 
 
@@ -128,6 +128,28 @@ class SceneMixin:
         pose = Pose()
         pose.position.x, pose.position.y, pose.position.z = (
             float(centre_x), float(centre_y), float(top / 2.0))
+        pose.orientation.w = 1.0
+        obj.primitives = [primitive]
+        obj.primitive_poses = [pose]
+        obj.operation = CollisionObject.ADD
+        scene = PlanningScene()
+        scene.is_diff = True
+        scene.world.collision_objects = [obj]
+        self.apply_scene(scene)
+
+    def add_floor(self):
+        """Adds the floor as a slab whose top is at floor_top, so plans can't go below it."""
+        top = self.get_parameter('floor_top').value
+        if np.isnan(top):
+            return
+        obj = CollisionObject()
+        obj.header.frame_id = self.scene_frame
+        obj.id = FLOOR_ID
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = [3.0, 3.0, 0.1]
+        pose = Pose()
+        pose.position.z = float(top - 0.05)
         pose.orientation.w = 1.0
         obj.primitives = [primitive]
         obj.primitive_poses = [pose]

@@ -117,6 +117,7 @@ def prepare(robot):
     robot.remove_object()
     robot.add_object()
     robot.add_support()
+    robot.add_floor()
 
 
 def place_all(robot):

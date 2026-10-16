@@ -17,6 +17,7 @@ GRIPPER_JOINTS = [
 ]
 OBJECT_ID = 'target_object'
 SUPPORT_ID = 'support_table'
+FLOOR_ID = 'floor'
 MOVEIT_SUCCESS = 1
 
 ROBOT = {
@@ -69,12 +70,14 @@ SCENES = {
         'support_size': [0.8, 0.6],     # xy extent of the table top
         'support_top': 0.30,            # z of the table top
         'object_margin': 0.004,
+        'floor_top' : float('nan'),
     },
     'real': {
         'support_centre': [-0.059, 1.086],
         'support_size': [0.67, 0.46],
         'support_top': 0.07,
         'object_margin': 0.004,
+        'floor_top' : -0.05,
     },
 }
 SCENE = SCENES[HARDWARE_MODE]
