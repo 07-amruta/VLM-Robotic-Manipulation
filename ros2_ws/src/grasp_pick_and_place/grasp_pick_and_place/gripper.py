@@ -40,6 +40,7 @@ class GripperMixin:
         eps = self.get_parameter('motion_eps').value
         needed = self.get_parameter('stall_count').value
         deadline = time.monotonic() + self.get_parameter('close_timeout').value
+        t0 = time.monotonic()
 
         start = list(self.finger_positions)
         target = list(start)
@@ -67,6 +68,11 @@ class GripperMixin:
                     return False
                 else:
                     target[i] = min(target[i] + step, limits[i])
+
+            self.get_logger().info(   # add, before send_goal_async
+                f'close t={time.monotonic() - t0:.2f} meas={np.round(self.finger_positions, 3).tolist()} '
+                f'tgt={np.round(target, 3).tolist()} still={still}')
+            self.gripper_client.send_goal_async(self.finger_goal(target, period))
 
             self.gripper_client.send_goal_async(self.finger_goal(target, period))
             self.spin_for(period)

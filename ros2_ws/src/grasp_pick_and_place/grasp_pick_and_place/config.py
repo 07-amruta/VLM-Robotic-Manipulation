@@ -142,6 +142,7 @@ CAMERAS = {
         'optical_frame': 'scene_camera_optical',
         'depth_min': 0.0,
         'depth_max': 100.0,
+        'support_z': SCENE['support_top'],  # table top; crop excludes the table, so no plane fit
         **CROP,
     },
     'd415': {
