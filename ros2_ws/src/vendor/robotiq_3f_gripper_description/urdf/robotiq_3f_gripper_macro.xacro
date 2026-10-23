@@ -18,7 +18,7 @@ Usage from a top-level xacro:
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
   <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_finger_macro.xacro"/>
 
-  <xacro:macro name="robotiq_3f_gripper_articulated" params="prefix parent *origin">
+  <xacro:macro name="robotiq_3f_gripper_articulated" params="prefix parent *origin articulated:=false" >
 
     <joint name="${prefix}palm_joint" type="fixed">
       <parent link="${parent}"/>
@@ -59,9 +59,9 @@ Usage from a top-level xacro:
       <origin xyz="0.0 0.0875 0.0" rpy="0 0 1.5707"/>
     </joint>
 
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_" axis_sign="1"/>
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_" axis_sign="1"/>
-    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_" axis_sign="-1" face_flip="-1"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_1_" axis_sign="1" articulated="${articulated}"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_2_" axis_sign="1" articulated="${articulated}"/>
+    <xacro:robotiq_3f_finger_articulated prefix="${prefix}finger_middle_" articulated="${articulated}"/>
 
     <joint name="${prefix}palm_finger_1_joint" type="fixed">
       <parent link="${prefix}palm"/>
@@ -77,7 +77,7 @@ Usage from a top-level xacro:
       <parent link="${prefix}palm"/>
       <child link="${prefix}finger_middle_link_0"/>
       <!-- Keep the middle finger in the original Robotiq in-plane orientation. -->
-      <origin xyz="0.0580 0.0214 0" rpy="0 3.1416 -1.95"/>
+      <origin xyz="0.0455 0.0114 0" rpy="0 0 1.1916"/>
     </joint>
 
   </xacro:macro>

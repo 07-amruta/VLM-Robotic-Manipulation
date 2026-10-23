@@ -96,7 +96,7 @@
 
     
     <!-- 2. Original cube: 8 cm -->
-    <model name="test_cube">
+    <!-- <model name="test_cube">
         <pose>0.001 0.658 0.35 0 0 0</pose>
         <static>false</static>
         <link name="link">
@@ -115,7 +115,7 @@
             </material>
             </visual>
         </link>
-    </model>
+    </model> -->
    
 
     
@@ -221,7 +221,7 @@
 
     
     <!-- 7. Mug-like object: 8 cm cylinder body (9 cm tall) with a handle block on the +y side -->
-    <!-- <model name="test_mug">
+    <model name="test_mug">
         <pose>0.001 0.658 0.350 0 0 0</pose>
         <static>false</static>
         <link name="link">
@@ -252,7 +252,7 @@
             </material>
             </visual>
         </link>
-    </model> -->
+    </model>
    
 
     <model name="scene_camera">

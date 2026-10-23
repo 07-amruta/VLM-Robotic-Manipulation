@@ -8,7 +8,7 @@ to ROS 2 / ament_cmake. Original package: BSD licensed, Robotiq Inc.
 Creates one articulated finger (3 revolute joints) with the given prefix.
 -->
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
-  <xacro:macro name="robotiq_3f_finger_articulated" params="prefix axis_sign=1 face_flip=0">
+  <xacro:macro name="robotiq_3f_finger_articulated" params="prefix axis_sign=1 face_flip=0 articulated=false">
 
     <link name="${prefix}link_0">
       <visual>
@@ -106,18 +106,34 @@ Creates one articulated finger (3 revolute joints) with the given prefix.
            finger matches the physical Robotiq layout without a flipped command set. -->
       <axis xyz="0 0 ${axis_sign}"/>
       <origin xyz="0.020 0 0" rpy="0 0 0"/>
-      <limit lower="0.0495" upper="1.2218" effort="100" velocity="1.0"/>
+      <limit lower="0.0445" upper="1.2718" effort="100" velocity="1.0"/>
     </joint>
+    <xacro:if value="${articulated}">
+    <joint name="${prefix}joint_2" type="revolute">
+      <parent link="${prefix}link_1"/><child link="${prefix}link_2"/>
+      <axis xyz="0 0 ${axis_sign}"/>
+      <origin xyz="0.050 -0.028 0" rpy="0 0 -0.52"/>
+      <limit lower="0.0" upper="1.6472" effort="100" velocity="100"/>
+      <mimic joint="${prefix}joint_1" multiplier="1.3400" offset="-0.0663"/>
+    </joint>
+    <joint name="${prefix}joint_3" type="revolute">
+      <parent link="${prefix}link_2"/><child link="${prefix}link_3"/>
+      <axis xyz="0 0 ${axis_sign}"/>
+      <origin xyz="0.039 0 0" rpy="0 0 0"/>
+      <limit lower="-1.2217" upper="-0.0400" effort="100" velocity="100"/>
+      <mimic joint="${prefix}joint_1" multiplier="-0.9975" offset="-0.0029"/>
+    </joint>
+  </xacro:if>
+  <xacro:unless value="${articulated}">
     <joint name="${prefix}joint_2" type="fixed">
-      <parent link="${prefix}link_1"/>
-      <child link="${prefix}link_2"/>
+      <parent link="${prefix}link_1"/><child link="${prefix}link_2"/>
       <origin xyz="0.050 -0.028 0" rpy="0 0 -0.52"/>
     </joint>
     <joint name="${prefix}joint_3" type="fixed">
-      <parent link="${prefix}link_2"/>
-      <child link="${prefix}link_3"/>
+      <parent link="${prefix}link_2"/><child link="${prefix}link_3"/>
       <origin xyz="0.039 0 0" rpy="0 0 0"/>
     </joint>
+  </xacro:unless>
 
   </xacro:macro>
 </robot>
