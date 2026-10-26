@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur10">
+
+  <xacro:arg name="name" default="ur10"/>
+  <xacro:arg name="tf_prefix" default=""/>
+  <xacro:arg name="gripper_prefix" default="gripper_"/>
+  <xacro:arg name="sim_ignition" default="true"/>
+  <xacro:arg name="sensor_mount_offset" default="0.081"/>
+  <xacro:arg name="articulated_fingers" default="false"/> 
+
+  <xacro:include filename="$(find ur_description)/urdf/ur.urdf.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_macro.xacro"/>
+  <xacro:include filename="$(find robotiq_3f_gripper_description)/urdf/robotiq_3f_gripper_ros2_control.xacro"/>
+
+  <xacro:robotiq_3f_gripper_articulated prefix="$(arg gripper_prefix)" parent="$(arg tf_prefix)tool0" articulated="$(arg articulated_fingers)">
+    <origin xyz="0 0 $(arg sensor_mount_offset)" rpy="1.5708 0 0"/>
+  </xacro:robotiq_3f_gripper_articulated>
+
+  <xacro:arg name="sensor_mount_radius" default="0.035"/>
+  <xacro:arg name="sensor_mount_mass" default="0.3"/>
+  <xacro:property name="sensor_mount_len" value="$(arg sensor_mount_offset)"/>
+  <xacro:property name="sensor_mount_r" value="$(arg sensor_mount_radius)"/>
+  <xacro:property name="sensor_mount_m" value="$(arg sensor_mount_mass)"/>
+
+  <link name="$(arg gripper_prefix)sensor_mount">
+    <visual>
+      <origin xyz="0 0 ${sensor_mount_len/2}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${sensor_mount_r}" length="${sensor_mount_len}"/></geometry>
+      <material name="sensor_mount"><color rgba="0.3 0.3 0.32 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${sensor_mount_len/2}" rpy="0 0 0"/>
+      <geometry><cylinder radius="${sensor_mount_r}" length="${sensor_mount_len}"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${sensor_mount_len/2}" rpy="0 0 0"/>
+      <mass value="${sensor_mount_m}"/>
+      <inertia ixx="${sensor_mount_m*(3*sensor_mount_r*sensor_mount_r+sensor_mount_len*sensor_mount_len)/12}" ixy="0" ixz="0"
+               iyy="${sensor_mount_m*(3*sensor_mount_r*sensor_mount_r+sensor_mount_len*sensor_mount_len)/12}" iyz="0"
+               izz="${sensor_mount_m*sensor_mount_r*sensor_mount_r/2}"/>
+    </inertial>
+  </link>
+  <joint name="$(arg gripper_prefix)sensor_mount_joint" type="fixed">
+    <parent link="$(arg tf_prefix)tool0"/>
+    <child link="$(arg gripper_prefix)sensor_mount"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  
+  <xacro:robotiq_3f_gripper_ros2_control prefix="$(arg gripper_prefix)" sim_ignition="$(arg sim_ignition)" articulated="$(arg articulated_fingers)"/> 
+</robot>

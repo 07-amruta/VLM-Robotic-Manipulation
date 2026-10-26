@@ -14,6 +14,63 @@ Visualization Manager:
       Move Group Namespace: ""
       Planning Scene Topic: /monitored_planning_scene
       Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Scene RGB
+      Normalize Range: true
+      Max Value: 1
+      Min Value: 0
+      Median window: 5
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /scene_camera/image
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Enabled: true
+      Name: Scene Depth
+      Normalize Range: false
+      Max Value: 3
+      Min Value: 0.1
+      Median window: 5
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /scene_camera/depth_image
+      Value: true
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: Scene Cloud
+      Style: Points
+      Size (Pixels): 2
+      Alpha: 1
+      Color Transformer: RGB8
+      Position Transformer: XYZ
+      Use Fixed Frame: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: /scene_camera/points
+      Value: true
+    - Class: rviz_default_plugins/Pose
+      Enabled: true
+      Name: Best Grasp
+      Shape: Axes
+      Axes Length: 0.1
+      Axes Radius: 0.005
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /grasp_pose
+      Value: true
   Global Options:
     Fixed Frame: world
   Tools:

@@ -140,6 +140,37 @@ colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_
 ```bash
 ros2 launch robot_bringup bringup.launch.py
 ```
+* For Real UR10 arm Moveit Launch in container
+
+```bash
+ros2 launch ur10_gripper_moveit_config moveit_real.launch.py
+```
+
+* For Real UR10 arm Driver Launch in host
+
+```bash
+ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10 robot_ip:=192.168.1.102 launch_rviz:=true
+```
+
+* Real Hardware Dry Run
+
+```bash
+DRY_RUN=1 HARDWARE_MODE=real ros2 run grasp_pick_and_place run_pick
+```
+
+* Real Hardware Run
+
+```bash
+HARDWARE_MODE=real ros2 run grasp_pick_and_place run_pick
+```
+
+
+* To rest position of cylinder in Gazebo
+
+```bash
+ign service -s /world/pick_and_place/set_pose --reqtype ignition.msgs.Pose --reptype ignition.msgs.Boolean --timeout 2000 --req 'name: "test_sphere", position: {x: 0.001, y: 0.658, z: 0.355}, orientation: {x: 0, y: 0, z: 0, w: 1}'
+```
+
 
 * For starting UR10 Control Stack
 
@@ -182,6 +213,13 @@ ros2 launch ur_calibration calibration_correction.launch.py robot_ip:=192.168.1.
 ```bash
 source install/setup.bash
 ```
+
+* For Triggering Scene Snapshot
+
+```bash
+ros2 service call /capture_scene std_srvs/srv/Trigger
+```
+
 
 ## License
 

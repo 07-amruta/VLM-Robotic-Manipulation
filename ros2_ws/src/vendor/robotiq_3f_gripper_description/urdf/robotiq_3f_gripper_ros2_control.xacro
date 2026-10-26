@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:macro name="robotiq_3f_finger_mimic" params="prefix finger">
+    <joint name="${prefix}${finger}joint_2">
+      <param name="mimic">${prefix}${finger}joint_1</param>
+      <param name="multiplier">1.3400</param>
+      <state_interface name="position"/>
+    </joint>
+    <joint name="${prefix}${finger}joint_3">
+      <param name="mimic">${prefix}${finger}joint_1</param>
+      <param name="multiplier">-0.9975</param>
+      <state_interface name="position"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro
+    name="robotiq_3f_gripper_ros2_control"
+    params="prefix sim_ignition:=true articulated:=false">
+
+    <ros2_control name="${prefix}gripper_system" type="system">
+
+      <hardware>
+
+        <xacro:if value="${sim_ignition}">
+          <plugin>ign_ros2_control/IgnitionSystem</plugin>
+        </xacro:if>
+
+        <xacro:unless value="${sim_ignition}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:unless>
+
+      </hardware>
+
+      <joint name="${prefix}finger_1_joint_1">
+        <command_interface name="position">
+          <param name="min">0.0495</param>
+          <param name="max">1.2218</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0495</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="${prefix}finger_2_joint_1">
+        <command_interface name="position">
+          <param name="min">0.0495</param>
+          <param name="max">1.2218</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0495</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="${prefix}finger_middle_joint_1">
+        <command_interface name="position">
+          <param name="min">0.0495</param>
+          <param name="max">1.2218</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0495</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <xacro:if value="${articulated}">
+        <xacro:robotiq_3f_finger_mimic prefix="${prefix}" finger="finger_1_"/>
+        <xacro:robotiq_3f_finger_mimic prefix="${prefix}" finger="finger_2_"/>
+        <xacro:robotiq_3f_finger_mimic prefix="${prefix}" finger="finger_middle_"/>
+      </xacro:if>
+      
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>
