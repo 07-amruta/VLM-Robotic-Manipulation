@@ -220,6 +220,10 @@ source install/setup.bash
 ros2 service call /capture_scene std_srvs/srv/Trigger
 ```
 
+Gripper Test Scripts include - 
+- Grasp_pick_and_place/grasp_pick_and_place/gripper_Real_test.py
+- Grasp_pick_and_place/grasp_pick_and_place/robotiq_3f_gripper.py
+
 
 ## License
 
