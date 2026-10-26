@@ -8,7 +8,7 @@ def generate_launch_description():
 
     gazebo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            FindPackageShare('ur10_control'),
+            FindPackageShare('robot_bringup'),
             '/launch/gazebo_simulation.launch.py'
         ])
     )

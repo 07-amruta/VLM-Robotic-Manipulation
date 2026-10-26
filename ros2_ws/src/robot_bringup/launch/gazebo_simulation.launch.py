@@ -24,7 +24,7 @@ def generate_launch_description():
 
     robotiq_gripper_description = get_package_share_directory("robotiq_3f_gripper_description")
     ros_ign_gazebo = get_package_share_directory("ros_gz_sim")
-    ur10_control = get_package_share_directory("ur10_control")
+    robot_bringup = get_package_share_directory("robot_bringup")
 
     # Ignition resolves package:// mesh URIs via GZ_SIM_RESOURCE_PATH /
     # IGN_GAZEBO_RESOURCE_PATH, not the ROS package path -- RViz doesn't
@@ -39,7 +39,7 @@ def generate_launch_description():
     # ---------------------------------------------------------
 
     controllers_file = os.path.join(
-        ur10_control,
+        robot_bringup,
         "config",
         "gazebo_controllers.yaml",
     )
