@@ -32,7 +32,7 @@ def generate_launch_description():
 
     kinematics = load_yaml(moveit_config_pkg, "config/kinematics.yaml")
     joint_limits = load_yaml(moveit_config_pkg, "config/joint_limits.yaml")
-    moveit_controllers = load_yaml(moveit_config_pkg, "config/moveit_controllers.yaml")
+    moveit_controllers = load_yaml(moveit_config_pkg, "config/sim/moveit_controllers.yaml")
     ompl_planning = load_yaml(moveit_config_pkg, "config/ompl_planning.yaml")
 
     trajectory_execution = {
@@ -72,7 +72,7 @@ def generate_launch_description():
         package="rviz2",
         executable="rviz2",
         output="screen",
-        arguments=["-d", os.path.join(get_package_share_directory(moveit_config_pkg), "launch", "moveit.rviz")],
+        arguments=["-d", os.path.join(get_package_share_directory(moveit_config_pkg), "rviz", "moveit.rviz")],
         parameters=[
             {"robot_description": robot_description},
             {"robot_description_semantic": robot_description_semantic},

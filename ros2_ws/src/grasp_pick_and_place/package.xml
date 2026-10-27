@@ -3,9 +3,9 @@
 <package format="3">
   <name>grasp_pick_and_place</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="amruta.panda.mit@gmail.com">root</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Grasp perception, planning and pick execution for UR10 + Robotiq 3F</description>
+  <maintainer email="amruta.panda.mit@gmail.com">Amruta</maintainer>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>tf2_ros</depend>

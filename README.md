@@ -138,7 +138,7 @@ colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_
 * For Robot Bringup Launch
 
 ```bash
-ros2 launch robot_bringup bringup.launch.py
+ros2 launch robot_bringup bringup.launch.py object:=cube
 ```
 * For Real UR10 arm Moveit Launch in container
 

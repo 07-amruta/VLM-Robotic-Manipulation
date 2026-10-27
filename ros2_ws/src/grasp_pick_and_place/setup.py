@@ -13,10 +13,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='root',
+    maintainer='Amruta',
     maintainer_email='amruta.panda.mit@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Grasp perception, planning and pick execution for UR10 + Robotiq 3F',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',

@@ -10,9 +10,8 @@
     using MoveIt 2.
   </description>
 
-  <maintainer email="amruta.panda.mit@gmail.com">scg</maintainer>
-
-  <license>Apache-2.0</license>
+  <maintainer email="amruta.panda.mit@gmail.com">Amruta</maintainer>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
   <depend>moveit_msgs</depend>

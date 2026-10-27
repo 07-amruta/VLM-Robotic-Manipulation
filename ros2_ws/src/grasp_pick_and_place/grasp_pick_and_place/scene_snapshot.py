@@ -136,13 +136,13 @@ class SceneSnapshot(Node):
         depth = np.where(valid & (hi - lo <= self.get_parameter('edge_tol').value), depth, 0.0)
 
         # Deproject to the optical frame (x right, y down, z forward), then to the target frame
-        points = deproject(depth, np.array(info.k).reshape(3, 3))
+        points, _ = deproject(depth, np.array(info.k).reshape(3, 3))
         t = tf.transform.translation
         q = tf.transform.rotation
         matrix = np.eye(4)
         matrix[:3, :3] = quaternion_to_matrix(q.x, q.y, q.z, q.w)
         matrix[:3, 3] = [t.x, t.y, t.z]
-        points = transform_points(points, matrix)        
+        points = transform_points(points, matrix)
 
         # Crop to the workspace box
         lo = np.array(self.get_parameter('crop_min').value)

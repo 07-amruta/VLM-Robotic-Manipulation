@@ -33,12 +33,12 @@ setup(
 
     zip_safe=True,
 
-    maintainer='scg',
+    maintainer='Amruta',
     maintainer_email='amruta.panda.mit@gmail.com',
 
     description='ROS 2 package for UR10 control using MoveIt 2.',
 
-    license='Apache-2.0',
+    license='MIT',
 
     extras_require={
         'test': [

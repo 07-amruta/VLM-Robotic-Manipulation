@@ -3,9 +3,9 @@
 <package format="3">
   <name>robot_bringup</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="amruta.panda.mit@gmail.com">scg</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Top-level bringup for UR10 + Robotiq 3F manipulation stack</description>
+  <maintainer email="amruta.panda.mit@gmail.com">Amruta</maintainer>
+  <license>MIT</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

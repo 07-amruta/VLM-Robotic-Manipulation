@@ -1,13 +1,51 @@
 import os
+import xml.etree.ElementTree as ET
 
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable,
+    TimerAction)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import Command, FindExecutable
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+OBJECT_PREFIX = "test_"
+
+
+def world_actions(context):
+    """Gazebo with only the selected test object, and the scene camera TF read from the world."""
+    ros_gz_sim = get_package_share_directory("ros_gz_sim")
+    src = os.path.join(get_package_share_directory("robot_bringup"), "worlds", "pick_and_place.sdf")
+    name = OBJECT_PREFIX + LaunchConfiguration("object").perform(context)
+
+    tree = ET.parse(src)
+    world = tree.getroot().find("world")
+    objects = [m for m in world.findall("model") if m.get("name").startswith(OBJECT_PREFIX)]
+    if name not in [m.get("name") for m in objects]:
+        raise RuntimeError(
+            f"Unknown object; available: {[m.get('name')[len(OBJECT_PREFIX):] for m in objects]}")
+    for m in objects:
+        if m.get("name") != name:
+            world.remove(m)
+    x, y, z, roll, pitch, yaw = world.find("model[@name='scene_camera']/pose").text.split()
+
+    world_file = f"/tmp/pick_and_place_{name}.sdf"
+    tree.write(world_file, encoding="utf-8", xml_declaration=True)
+
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(ros_gz_sim, "launch", "gz_sim.launch.py")),
+        launch_arguments={"gz_args": world_file + " -r"}.items(),
+    )
+    scene_camera_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=["--x", x, "--y", y, "--z", z, "--roll", roll, "--pitch", pitch, "--yaw", yaw,
+                   "--frame-id", "base_link", "--child-frame-id", "scene_camera_link"],
+    )
+    return [gazebo, scene_camera_tf]
 
 
 def generate_launch_description():
@@ -23,7 +61,6 @@ def generate_launch_description():
     # ---------------------------------------------------------
 
     robotiq_gripper_description = get_package_share_directory("robotiq_3f_gripper_description")
-    ros_ign_gazebo = get_package_share_directory("ros_gz_sim")
     robot_bringup = get_package_share_directory("robot_bringup")
 
     # Ignition resolves package:// mesh URIs via GZ_SIM_RESOURCE_PATH /
@@ -79,28 +116,6 @@ def generate_launch_description():
     )
 
     # ---------------------------------------------------------
-    # Start Gazebo Fortress (Ignition Gazebo)
-    #
-    # Package/launch-file/arg names for Fortress:
-    #   ros_ign_gazebo / ign_gazebo.launch.py / ign_args
-    # (For Garden/Harmonic this would instead be
-    #   ros_gz_sim / gz_sim.launch.py / gz_args)
-    # ---------------------------------------------------------
-
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                ros_ign_gazebo,
-                "launch",
-                "gz_sim.launch.py",
-            )
-        ),
-        launch_arguments={"gz_args": os.path.join(
-            get_package_share_directory("robot_bringup"), "worlds", "pick_and_place.sdf"
-        ) + " -r"}.items(),
-    )
-
-    # ---------------------------------------------------------
     # Clock bridge
     #
     # Ignition publishes sim time over Ignition Transport, not
@@ -128,17 +143,6 @@ def generate_launch_description():
             "/scene_camera/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo",
         ],
         output="screen",
-    )
-
-    scene_camera_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        arguments=[
-            "--x", "0", "--y", "1.25", "--z", "1.3",
-            "--roll", "0", "--pitch", "1.02", "--yaw", "4.7124",
-            "--frame-id", "base_link",
-            "--child-frame-id", "scene_camera_link",
-        ],
     )
 
     scene_camera_optical_tf = Node(
@@ -246,12 +250,14 @@ def generate_launch_description():
             value=os.path.join(robotiq_gripper_description, ".."),
         ),
 
-        gazebo,
+        DeclareLaunchArgument(
+            "object", default_value="mug",
+            description="cylinder|cube|tall_box|small_box|wide_box|sphere|mug"),
+        OpaqueFunction(function=world_actions),
         clock_bridge,
         camera_bridge,
         robot_state_publisher,
         spawn_robot,
-        scene_camera_tf,
         scene_camera_optical_tf,
 
         # Give Ignition time to load ign_ros2_control and start

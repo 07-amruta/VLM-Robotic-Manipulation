@@ -18,10 +18,10 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='amruta',
+    maintainer='Amruta',
     maintainer_email='amruta.panda.mit@gmail.com',
     description='Top-level bringup for UR10 + Robotiq 3F manipulation stack',
-    license='Apache-2.0',
+    license='MIT',
     entry_points={
         'console_scripts': [],
     },
