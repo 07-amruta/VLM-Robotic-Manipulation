@@ -127,14 +127,25 @@ def place_all(robot):
     proposals.append(robot.top_down_grasp())
 
     placed, tried = [], []
+    log = robot.get_logger()
     for rank, proposal in enumerate(proposals, 1):
-        for grasp in robot.hand_poses(proposal):
+        label = 'fallback' if rank == len(proposals) else str(rank)
+        poses = robot.hand_poses(proposal)
+        if not poses:
+            log.info(f'[{label}] no hand pose')
+        for grasp in poses:
+            az = grasp[2, 0]  # approach z; -1 = straight down
             if any(is_similar(grasp, other) for other in tried):
+                log.info(f'[{label}] duplicate az={az:.2f}')
                 continue
             tried.append(grasp)
             result = robot.place_hand(grasp)
-            if result is not None:
-                placed.append((result[3], rank, *result[:3]))
+            if result is None:
+                log.info(f'[{label}] rejected az={az:.2f}')
+                continue
+            log.info(f'[{label}] placed offset={result[3]:.2f} az={az:.2f}')
+            placed.append((result[3], rank, *result[:3]))
+            
     placed.sort(key=lambda item: item[0])  # stable: GraspNet order breaks ties
     robot.get_logger().info(f'{len(placed)} of {len(tried)} hand poses fit around the object')
     return placed, len(proposals)
