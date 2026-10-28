@@ -135,6 +135,15 @@ colcon build --packages-up-to robot_bringup --symlink-install
 colcon build --packages-select robotiq_3f_gripper_description ur10_control ur10_gripper_moveit_config --symlink-install
 ```
 
+* Camera Calibration Command T2
+
+```bash
+   ros2 run grasp_pick_and_place scene_snapshot --ros-args \
+     -p target_frame:=camera_depth_optical_frame -p optical_frame:=camera_depth_optical_frame \
+     -p 'crop_min:=[-1.5,-1.5,0.4]' -p 'crop_max:=[1.5,1.5,2.0]' -p depth_min:=0.4 -p depth_max:=2.0
+```
+
+
 * For Robot Bringup Launch
 
 ```bash

@@ -6,7 +6,7 @@ from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 
-from grasp_pick_and_place.config import GRIPPER_JOINTS
+from grasp_pick_and_place.config import GRIPPER_JOINTS, HARDWARE_MODE
 from grasp_pick_and_place.transform_utils import lookup_matrix
 
 
@@ -99,6 +99,8 @@ class GripperMixin:
         direction = pair - opposing
         direction[0] = 0.0  # x is the approach axis of the grasp frame
         centre[0] = self.get_parameter('hand_centre_depth').value
+        if HARDWARE_MODE == 'real':
+            centre[1] += 0.0385  # temporary test: restore pre-URDF closing centre
         gap = float(np.linalg.norm(direction))
         self.hand_gap = gap
         self.get_logger().info(f'hand gap {gap:.3f}')
