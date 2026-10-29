@@ -11,6 +11,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import Buffer, TransformException, TransformListener
 
+from grasp_pick_and_place.config import PROPOSER
 from grasp_pick_and_place.transform_utils import lookup_matrix, matrix_to_pose
 
 
@@ -76,7 +77,7 @@ class GraspProposer(Node):
         # Drop grasps whose approach points upward (z component of the approach above this).
         # 0.0 keeps horizontal and downward approaches; the executor ranks them by reachability
         # and by how close the hand can close to the object's centre.
-        self.declare_parameter('max_approach_z', -0.5)
+        self.declare_parameter('max_approach_z', PROPOSER['max_approach_z'])
         # Drop grasps centred lower than this above the object's lowest point (the table).
         self.declare_parameter('min_grasp_height', 0.02)
         self.declare_parameter('num_candidates', 30)

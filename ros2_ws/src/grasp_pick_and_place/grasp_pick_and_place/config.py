@@ -63,6 +63,11 @@ GRIPPER = {
     'hand_centre_depth': 0.0 if HARDWARE_MODE == 'sim' else 0.10,  # m, tcp -> pad midpoint along approach; measured on real
 }
 
+PROPOSER = {
+    # steepest-first limit on GraspNet approach z; tilted real approaches slipped at close
+    'max_approach_z': -0.5 if HARDWARE_MODE == 'sim' else -0.7,
+}
+
 # Table block per hardware. Real values (base_link frame, metres) must be measured.
 SCENES = {
     'sim': {

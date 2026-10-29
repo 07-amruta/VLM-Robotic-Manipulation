@@ -137,6 +137,7 @@ class SceneSnapshot(Node):
 
         # Deproject to the optical frame (x right, y down, z forward), then to the target frame
         points, _ = deproject(depth, np.array(info.k).reshape(3, 3))
+        np.save(f'/tmp/optical_{_t.time_ns()}.npy', points.astype(np.float32))  # temporary
         t = tf.transform.translation
         q = tf.transform.rotation
         matrix = np.eye(4)

@@ -4,7 +4,7 @@ from scipy.spatial.transform import Rotation
 CUBE_H = 0.08        # object top face above the box top, m (caliper)
 OBJ_R = 0.11         # half the longest footprint dimension plus margin, m
 TABLE_Z = 0.07
-TOUCH = {'A': (-0.1888, 0.9668), 'B': (0.1704, 0.9509), 'C': (-0.0127, 1.1551)}
+TOUCH = {'A': (-0.1415, 0.9669), 'B': (0.2248, 0.9253), 'C': (0.0373, 1.1536)}
 THR = 0.005
 rng = np.random.default_rng(0)
 
