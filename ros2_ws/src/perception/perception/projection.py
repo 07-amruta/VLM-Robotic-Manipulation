@@ -1,7 +1,15 @@
 import numpy as np
+from scipy.ndimage import maximum_filter, minimum_filter
 
 MM_TO_M = 0.001  # REP 118: 16UC1 depth is millimetres
 
+def clean_depth(depth, depth_min, depth_max, edge_tol):
+    """Zero pixels outside [depth_min, depth_max] and depth-edge pixels (jump > edge_tol in the 3x3 neighbourhood)."""
+    depth = np.where((depth >= depth_min) & (depth <= depth_max), depth, 0.0)
+    valid = depth > 0
+    hi = maximum_filter(depth, size=3)
+    lo = minimum_filter(np.where(valid, depth, np.inf), size=3)
+    return np.where(valid & (hi - lo <= edge_tol), depth, 0.0)
 
 def depth_to_metres(data, encoding, height, width):
     """Raw depth image bytes -> float array in metres. Supports 32FC1 (m) and 16UC1 (mm)."""

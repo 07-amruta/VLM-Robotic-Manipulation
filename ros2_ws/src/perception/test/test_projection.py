@@ -1,6 +1,6 @@
 import numpy as np
 
-from grasp_pick_and_place.projection import (
+from perception.projection import (
     deproject, depth_to_metres, project, select_in_mask, transform_points)
 
 K = np.array([[900.0, 0.0, 32.0], [0.0, 900.0, 24.0], [0.0, 0.0, 1.0]])

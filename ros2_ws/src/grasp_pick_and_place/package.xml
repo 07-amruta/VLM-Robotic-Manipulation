@@ -15,6 +15,8 @@
   <depend>control_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>trajectory_msgs</depend>
+  <depend>perception</depend>
+  <depend>perception_msgs</depend>
   <depend>builtin_interfaces</depend>
   <exec_depend>shape_msgs</exec_depend>
   <exec_depend>python3-scipy</exec_depend>

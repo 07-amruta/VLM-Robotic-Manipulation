@@ -12,7 +12,8 @@ from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
-from grasp_pick_and_place.projection import deproject, depth_to_metres, transform_points
+from perception_msgs.msg import SceneObjectArray
+from perception.projection import deproject, depth_to_metres, transform_points
 from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
@@ -73,6 +74,9 @@ class SceneSnapshot(Node):
         self.declare_parameter('cluster_radius', 0.015)
         self.declare_parameter('edge_tol', 0.01)
         self.declare_parameter('support_z', float('nan'))  # nan = off (sim unchanged)
+        self.declare_parameter('objects_topic', '')  # '' = plane-fit path
+        self.declare_parameter('target_class', '')   # '' = largest object
+        self.objects_msg = None
 
         self.depth_msg = None
         self.info_msg = None
@@ -86,6 +90,9 @@ class SceneSnapshot(Node):
         self.create_subscription(
             CameraInfo, self.get_parameter('camera_info_topic').value,
             self.on_info, qos_profile_sensor_data)
+        if self.get_parameter('objects_topic').value:
+            self.create_subscription(
+                SceneObjectArray, self.get_parameter('objects_topic').value, self.on_objects, 1)
 
         latched = QoSProfile(
             depth=1,
@@ -101,7 +108,29 @@ class SceneSnapshot(Node):
     def on_info(self, msg):
         self.info_msg = msg
 
+    def on_objects(self, msg):
+        self.objects_msg = msg
+
+    def capture_object(self, response):
+        if self.objects_msg is None or not self.objects_msg.objects:
+            response.success = False
+            response.message = 'No objects received'
+            return response
+        target = self.get_parameter('target_class').value
+        candidates = [o for o in self.objects_msg.objects if not target or o.class_name == target]
+        if not candidates:
+            response.success = False
+            response.message = f'No object of class {target!r}'
+            return response
+        chosen = max(candidates, key=lambda o: o.cloud.width)
+        self.points_pub.publish(chosen.cloud)
+        response.success = True
+        response.message = f'{chosen.class_name} #{chosen.track_id}: {chosen.cloud.width} points'
+        return response
+
     def on_capture(self, request, response):
+        if self.get_parameter('objects_topic').value:
+            return self.capture_object(response)
         if self.depth_msg is None or self.info_msg is None:
             response.success = False
             response.message = 'No depth image or camera_info received yet'

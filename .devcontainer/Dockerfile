@@ -225,3 +225,4 @@ WORKDIR /workspaces
 
 ENV GRASPNET_ROOT=/opt/graspnet-baseline
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+ENV PATH="${PATH}:/usr/src/tensorrt/bin"

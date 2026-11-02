@@ -1,5 +1,6 @@
 """Per-setup values: robot, gripper, scene, shape heuristics, search. Edit only this file."""
 import os
+from perception.config import ACTIVE_CAMERA, CAMERAS
 
 HARDWARE_MODE = os.environ.get('HARDWARE_MODE', 'sim')    # 'sim' | 'real'
 SCENE_SOURCE = os.environ.get('SCENE_SOURCE', 'camera')   # 'camera' | 'manual' (fixed object, no camera)
@@ -137,31 +138,18 @@ GRIPPER_REAL = {
 }
 PARAMS = {**ROBOT, **MOTION, **GRIPPER, **SCENE, **SHAPE, **SEARCH, **GRIPPER_REAL}
 
-# Camera profiles. Optical frames are declared, never inferred from message headers
-# (the sim depth header carries a non-optical frame). The depth range only guards against
-# invalid-depth sentinel values; tighten it per camera from its datasheet.
-CAMERAS = {
-    'sim': {
-        'depth_topic': '/scene_camera/depth_image',
-        'camera_info_topic': '/scene_camera/camera_info',
-        'optical_frame': 'scene_camera_optical',
-        'depth_min': 0.0,
-        'depth_max': 100.0,
-        'support_z': SCENE['support_top'],  # table top; crop excludes the table, so no plane fit
-        **CROP,
-    },
-    'd415': {
-        'depth_topic': '/camera/camera/depth/image_rect_raw',
-        'camera_info_topic': '/camera/camera/depth/camera_info',
-        'optical_frame': 'camera_depth_optical_frame',
-        'depth_min': 0.0,
-        'depth_max': 2.0,
-        'support_z': 0.07,  # measured table top height
-        **CROP,
-    },
+# Camera profiles live in `perception`; table-bound params (CROP, support_z) stay here.
+
+CAMERA = {
+    **{k: CAMERAS[ACTIVE_CAMERA][k] for k in (
+        'depth_topic', 'camera_info_topic', 'optical_frame', 'depth_min', 'depth_max')},
+    'support_z': SCENE['support_top'],  # sim: table top (crop excludes it); real: measured 0.07
+    **CROP,
 }
-ACTIVE_CAMERA = os.environ.get('ACTIVE_CAMERA', 'd415' if HARDWARE_MODE == 'real' else 'sim')
-CAMERA = CAMERAS[ACTIVE_CAMERA]
+if os.environ.get('USE_OBJECTS', '0') == '1':  # per-object clouds from `perception` instead of plane fit
+    CAMERA['objects_topic'] = '/scene_objects'
+    if os.environ.get('TARGET_CLASS'):
+        CAMERA['target_class'] = os.environ['TARGET_CLASS']
 
 SAFETY = {
     'dry_run': os.environ.get('DRY_RUN', '0') == '1',  # plan only, no arm motion (gripper still opens)

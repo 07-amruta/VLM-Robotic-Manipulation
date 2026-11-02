@@ -16,6 +16,8 @@
   <exec_depend>ur10_control</exec_depend>
   <exec_depend>ur10_gripper_moveit_config</exec_depend>
   <exec_depend>grasp_pick_and_place</exec_depend>
+  <exec_depend>perception</exec_depend>
+  <exec_depend>perception_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
