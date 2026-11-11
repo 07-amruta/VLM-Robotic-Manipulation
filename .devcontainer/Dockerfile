@@ -2,6 +2,8 @@ FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/nvidia/cu12/lib:${LD_LIBRARY_PATH}
+RUN printf 'numpy==1.26.4\nopencv-python==4.11.0.86\n' > /etc/pip-constraints.txt
+ENV PIP_CONSTRAINT=/etc/pip-constraints.txt
 
 # ROS 2 repository
 RUN apt-get update && apt-get install -y \
@@ -120,7 +122,7 @@ RUN pip3 install --no-cache-dir \
 # cuDSS runtime (torch 2.11.0 on Jetson links against this; not bundled in the jp6 wheel)
 RUN pip3 install --no-cache-dir nvidia-cudss-cu12
 
-RUN pip3 install --no-cache-dir nvidia-cudss-cu12
+RUN pip3 install --no-cache-dir "nvidia-cudss-cu12<1"
 
 # pip's CUDA 12.9 cuBLAS shadows JetPack's 12.6 cuBLAS and breaks cublasCreate on the Orin
 RUN pip3 uninstall -y nvidia-cublas-cu12
@@ -211,10 +213,11 @@ RUN echo "source /opt/realsense_ws/install/setup.bash" >> /etc/bash.bashrc
 RUN pip3 install --no-cache-dir ultralytics
 # NEW: apt cv_bridge is built against numpy 1.x; opencv-python >=4.12 forces numpy 2. Pin both.
 # NEW: onnx/onnxslim = TRT export path; lapx = tracker; scikit-learn = DBSCAN/RANSAC cloud cleanup.
-RUN pip3 install --no-cache-dir "numpy<2" "opencv-python<4.12" onnx onnxslim lapx scikit-learn
+RUN pip3 install --no-cache-dir onnx onnxslim lapx scikit-learn
 RUN python3 -c "import torch; assert torch.__version__.startswith('2.11.0'), torch.__version__"
 # NEW: build guards (an import-only check passed while the conversion was broken)
 RUN python3 -c "import numpy; assert numpy.__version__.startswith('1.'), numpy.__version__"
+RUN python3 -c "import cv2; assert cv2.__version__.startswith('4.11'), cv2.__version__"
 RUN . /opt/ros/humble/setup.sh && python3 -c "from cv_bridge import CvBridge; import numpy as np; b=CvBridge(); print(b.imgmsg_to_cv2(b.cv2_to_imgmsg(np.zeros((4,4,3),np.uint8),'bgr8')).shape)"
 
 # Last: keep pip's CUDA 12.9 cuBLAS from shadowing JetPack's, whatever got installed above

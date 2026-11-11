@@ -94,13 +94,18 @@ class GraspPlannerMixin:
                 reach = q
                 break
         if reach is None:
+            self.get_logger().info('closed-hand check: fingers never reach the object model')
             return True
 
         # Pass 2: with gripper-object contact allowed, every closure up to the grasp must be valid
         self.set_contact_allowed(True)
         last = min(reach + margin, limit)
         for q in [c for c in closures if c <= last] + [last]:
-            if not self.validity_at(joints, [q] * len(GRIPPER_JOINTS)).valid:
+            response = self.validity_at(joints, [q] * len(GRIPPER_JOINTS))
+            if not response.valid:
+                self.get_logger().info(
+                    f'closed-hand hit at q={q:.2f}: '
+                    f'{sorted({(c.contact_body_1, c.contact_body_2) for c in response.contacts})}')
                 return False
         return True
 
