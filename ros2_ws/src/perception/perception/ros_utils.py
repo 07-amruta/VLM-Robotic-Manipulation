@@ -14,9 +14,9 @@ def quaternion_to_matrix(x, y, z, w):
     ])
 
 
-def lookup_matrix(buffer, target, source):
-    """Latest 4x4 matrix mapping points in `source` into `target`."""
-    tf = buffer.lookup_transform(target, source, Time())
+def lookup_matrix(buffer, target, source, stamp=None):
+    """4x4 matrix mapping points in `source` into `target`; latest if `stamp` is None."""
+    tf = buffer.lookup_transform(target, source, Time() if stamp is None else Time.from_msg(stamp))
     t, q = tf.transform.translation, tf.transform.rotation
     matrix = np.eye(4)
     matrix[:3, :3] = quaternion_to_matrix(q.x, q.y, q.z, q.w)

@@ -11,9 +11,11 @@ from rclpy.qos import (
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from std_srvs.srv import Trigger
+from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
 from perception_msgs.msg import SceneObjectArray
 from perception.projection import deproject, depth_to_metres, transform_points
+from perception.mask_to_cloud import to_pointcloud2
 from scipy.spatial import cKDTree
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
@@ -76,7 +78,21 @@ class SceneSnapshot(Node):
         self.declare_parameter('support_z', float('nan'))  # nan = off (sim unchanged)
         self.declare_parameter('objects_topic', '')  # '' = plane-fit path
         self.declare_parameter('target_class', '')   # '' = largest object
+        self.declare_parameter('target_point', [0.0, 0.0, 0.0])
+        self.declare_parameter('target_radius', 0.0)  # 0 = ignore the point
+        self.declare_parameter('objects_max_age', 1.0)  # s; stale arrays are rejected
+        self.declare_parameter('obstacles_topic', '')  # '' = obstacles off
+        self.declare_parameter('obstacle_dedup_margin', 0.02)  # m
+        self.obstacles_msg = None
+        self.obstacles_time = None
         self.objects_msg = None
+        self.objects_time = None
+
+        self.request = ''
+        self.create_subscription(
+            String, 'target_request', self.on_request,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
 
         self.depth_msg = None
         self.info_msg = None
@@ -93,6 +109,9 @@ class SceneSnapshot(Node):
         if self.get_parameter('objects_topic').value:
             self.create_subscription(
                 SceneObjectArray, self.get_parameter('objects_topic').value, self.on_objects, 1)
+        if self.get_parameter('obstacles_topic').value:
+            self.create_subscription(
+                SceneObjectArray, self.get_parameter('obstacles_topic').value, self.on_obstacles, 1)
 
         latched = QoSProfile(
             depth=1,
@@ -100,6 +119,7 @@ class SceneSnapshot(Node):
             reliability=ReliabilityPolicy.RELIABLE,
         )
         self.points_pub = self.create_publisher(PointCloud2, 'scene_points', latched)
+        self.obstacles_pub = self.create_publisher(SceneObjectArray, 'scene_obstacles', latched)
         self.create_service(Trigger, 'capture_scene', self.on_capture)
 
     def on_depth(self, msg):
@@ -110,23 +130,69 @@ class SceneSnapshot(Node):
 
     def on_objects(self, msg):
         self.objects_msg = msg
+        self.objects_time = self.get_clock().now()
+
+    def on_obstacles(self, msg):
+        self.obstacles_msg = msg
+        self.obstacles_time = self.get_clock().now()
+
+    def on_request(self, msg):
+        self.request = msg.data.strip()
 
     def capture_object(self, response):
         if self.objects_msg is None or not self.objects_msg.objects:
             response.success = False
             response.message = 'No objects received'
             return response
-        target = self.get_parameter('target_class').value
+        age = (self.get_clock().now() - self.objects_time).nanoseconds / 1e9
+        if age > self.get_parameter('objects_max_age').value:
+            response.success = False
+            response.message = f'Objects stale: {age:.1f} s old'
+            return response
+        target = self.request or self.get_parameter('target_class').value
         candidates = [o for o in self.objects_msg.objects if not target or o.class_name == target]
         if not candidates:
             response.success = False
             response.message = f'No object of class {target!r}'
             return response
-        chosen = max(candidates, key=lambda o: o.cloud.width)
+        radius = self.get_parameter('target_radius').value
+        if radius > 0:
+            point = np.array(self.get_parameter('target_point').value)
+
+            def distance(o):
+                return np.linalg.norm(np.frombuffer(o.cloud.data, np.float32).reshape(-1, 3).mean(0) - point)
+
+            candidates = [o for o in candidates if distance(o) <= radius]
+            if not candidates:
+                response.success = False
+                response.message = f'No object within {radius} m of {point.tolist()}'
+                return response
+            chosen = min(candidates, key=distance)
+        else:
+            chosen = max(candidates, key=lambda o: o.cloud.width)
+        self.publish_obstacles(chosen)
         self.points_pub.publish(chosen.cloud)
         response.success = True
         response.message = f'{chosen.class_name} #{chosen.track_id}: {chosen.cloud.width} points'
         return response
+
+    def publish_obstacles(self, chosen):
+        """Latches every other cluster as an obstacle; clusters overlapping the target are dropped."""
+        out = SceneObjectArray()
+        out.header.frame_id = chosen.cloud.header.frame_id
+        if self.obstacles_msg is not None:
+            age = (self.get_clock().now() - self.obstacles_time).nanoseconds / 1e9
+            if age <= self.get_parameter('objects_max_age').value:
+                target = np.frombuffer(chosen.cloud.data, np.float32).reshape(-1, 3)
+                margin = self.get_parameter('obstacle_dedup_margin').value
+                lo, hi = target.min(0) - margin, target.max(0) + margin
+                for o in self.obstacles_msg.objects:
+                    centroid = np.frombuffer(o.cloud.data, np.float32).reshape(-1, 3).mean(0)
+                    if not np.all((centroid >= lo) & (centroid <= hi)):
+                        out.objects.append(o)
+        out.header.stamp = self.get_clock().now().to_msg()
+        self.obstacles_pub.publish(out)
+        self.get_logger().info(f'obstacles: {len(out.objects)}')
 
     def on_capture(self, request, response):
         if self.get_parameter('objects_topic').value:

@@ -10,7 +10,7 @@ from rcl_interfaces.srv import GetParameters
 from scipy.spatial.transform import Rotation
 from shape_msgs.msg import SolidPrimitive
 
-from grasp_pick_and_place.config import FLOOR_ID, OBJECT_ID, SUPPORT_ID
+from grasp_pick_and_place.config import FLOOR_ID, OBJECT_ID, OBSTACLE_PREFIX, SUPPORT_ID
 from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, top_slice
 
 
@@ -56,6 +56,63 @@ class SceneMixin:
             scene.is_diff = True
             scene.world.collision_objects = [remove]
             self.apply_scene(scene)
+
+    def remove_obstacles(self):
+        """Clears obstacles left over from an earlier run."""
+        request = GetPlanningScene.Request()
+        request.components.components = PlanningSceneComponents.WORLD_OBJECT_NAMES
+        current = self.call_service(self.get_scene_client, request).scene
+        stale = [o.id for o in current.world.collision_objects if o.id.startswith(OBSTACLE_PREFIX)]
+        if not stale:
+            return
+        scene = PlanningScene()
+        scene.is_diff = True
+        for name in stale:
+            remove = CollisionObject()
+            remove.id = name
+            remove.operation = CollisionObject.REMOVE
+            scene.world.collision_objects.append(remove)
+        self.apply_scene(scene)
+
+    def add_obstacles(self):
+        """Fits a box or cylinder to every obstacle cloud, extruded down to the support top."""
+        margin = self.get_parameter('object_margin').value
+        top = self.get_parameter('support_top').value
+        scene = PlanningScene()
+        scene.is_diff = True
+        self.obstacle_ids = []
+        for points in self.obstacles or []:
+            points = points.astype(float)
+            if points.shape[0] < 20:
+                continue
+            centre, size, yaw, _ = fit_box(points, margin, top)
+            round_, _, _ = is_round(points, yaw)
+            primitive = SolidPrimitive()
+            if round_:
+                primitive.type = SolidPrimitive.CYLINDER
+                primitive.dimensions = [float(size[2]), float(size[:2].mean() / 2.0)]
+            else:
+                primitive.type = SolidPrimitive.BOX
+                primitive.dimensions = [float(v) for v in size]
+            pose = Pose()
+            pose.position.x, pose.position.y, pose.position.z = map(float, centre)
+            qx, qy, qz, qw = Rotation.from_euler('z', yaw).as_quat()
+            pose.orientation.x, pose.orientation.y = float(qx), float(qy)
+            pose.orientation.z, pose.orientation.w = float(qz), float(qw)
+            obj = CollisionObject()
+            obj.header.frame_id = self.scene_frame
+            obj.id = f'{OBSTACLE_PREFIX}{len(self.obstacle_ids)}'
+            obj.primitives = [primitive]
+            obj.primitive_poses = [pose]
+            obj.operation = CollisionObject.ADD
+            scene.world.collision_objects.append(obj)
+            self.obstacle_ids.append(obj.id)
+            self.get_logger().info(
+                f'{obj.id} {"cylinder" if round_ else "box"} size {np.round(size, 3).tolist()} '
+                f'centre {np.round(centre, 3).tolist()}')
+        if self.obstacle_ids:
+            self.apply_scene(scene)
+        self.get_logger().info(f'Obstacles: {len(self.obstacle_ids)}')
 
     def add_object(self):
         """Fits a box, cylinder or sphere to the scene cloud and adds it to MoveIt's scene."""

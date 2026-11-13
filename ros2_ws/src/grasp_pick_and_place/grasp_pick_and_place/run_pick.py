@@ -11,7 +11,7 @@ from tf2_ros import TransformException
 import numpy as np
 
 from grasp_pick_and_place.config import (
-    CAMERA, HARDWARE_MODE, MANUAL_SCENE, SAFETY, SCENE, SCENE_SOURCE)
+    CAMERA, HARDWARE_MODE, MANUAL_SCENE, SAFETY, SCENE, SCENE_SOURCE, TARGET)
 from grasp_pick_and_place.geometry import is_similar
 from grasp_pick_and_place.pick_executor import PickExecutor
 from grasp_pick_and_place.transform_utils import lookup_matrix, pose_to_matrix
@@ -28,7 +28,9 @@ def background_nodes():
     """Nodes started with the sequence: the scene source."""
     if SCENE_SOURCE == 'manual':
         return {'manual_scene': {**MANUAL_SCENE, 'support_top': SCENE['support_top']}}
-    return {'scene_snapshot': CAMERA,
+    target = {k: v for k, v in TARGET.items() if v != ''}
+    return {'scene_snapshot': {**CAMERA, 'objects_topic': '/scene_objects',
+                               'obstacles_topic': '/scene_obstacle_clusters', **target},
             'grasp_proposer': {'optical_frame': CAMERA['optical_frame']}}
 
 
@@ -81,6 +83,7 @@ def capture_scene(robot):
         robot.get_logger().info(f'Capturing scene (attempt {attempt}/{CAPTURE_ATTEMPTS})')
         future = client.call_async(Trigger.Request())
         rclpy.spin_until_future_complete(robot, future)
+        robot.get_logger().info(f'capture: {future.result().message}')
         if spin_until(robot, lambda: bool(received), POSE_TIMEOUT):
             break
     else:
@@ -115,7 +118,9 @@ def prepare(robot):
     robot.hand_geometry()
     robot.gripper_links = robot.discover_gripper_links()
     robot.remove_object()
+    robot.remove_obstacles()
     robot.add_object()
+    robot.add_obstacles()
     robot.add_support()
     robot.add_floor()
 

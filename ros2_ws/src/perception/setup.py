@@ -25,6 +25,7 @@ setup(
             'geometric_segmenter = perception.geometric_segmenter:main',
             'instance_segmenter = perception.instance_segmenter:main',
             'scene_objects = perception.scene_objects:main',
+            'open_vocab_segmenter = perception.open_vocab_segmenter:main',
         ],
     },
 )

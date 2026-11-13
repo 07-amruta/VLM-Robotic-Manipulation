@@ -15,8 +15,9 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from sensor_msgs.msg import JointState, PointCloud2
 from tf2_ros import Buffer, TransformListener
+from perception_msgs.msg import SceneObjectArray
 
-from grasp_pick_and_place.config import ARM_JOINTS, GRIPPER_JOINTS, HARDWARE_MODE, PARAMS
+from grasp_pick_and_place.config import ARM_JOINTS, GRIPPER_JOINTS, HARDWARE_MODE, PARAMS, SCENE_SOURCE
 
 
 class RobotIO(Node):
@@ -36,6 +37,8 @@ class RobotIO(Node):
         self.joint_map = {}
         self.gripper_links = []
         self.rejections = Counter()
+        self.obstacles = None      # list of Nx3 clouds; None = not received yet
+        self.obstacle_ids = []
 
         self.frame_id = None
         self.tcp_to_link = None
@@ -58,6 +61,7 @@ class RobotIO(Node):
         self.create_subscription(PoseArray, 'grasp_candidates', self.on_candidates, latched)
         self.create_subscription(PointCloud2, 'scene_points', self.on_cloud, latched)
         self.create_subscription(JointState, '/joint_states', self.on_joint_state, 10)
+        self.create_subscription(SceneObjectArray, 'scene_obstacles', self.on_obstacles, latched)
 
         self.move_group_client = ActionClient(self, MoveGroup, '/move_action')
         self.execute_client = ActionClient(self, ExecuteTrajectory, '/execute_trajectory')
@@ -94,6 +98,10 @@ class RobotIO(Node):
         self.scene_points = np.frombuffer(msg.data, dtype=np.float32).reshape(-1, 3)
         self.scene_frame = msg.header.frame_id
 
+    def on_obstacles(self, msg):
+        self.obstacles = [np.frombuffer(o.cloud.data, dtype=np.float32).reshape(-1, 3)
+                          for o in msg.objects]
+
     def on_joint_state(self, msg):
         self.joint_map.update(zip(msg.name, msg.position))
         # Look joints up by name; JointState does not guarantee ordering
@@ -128,6 +136,7 @@ class RobotIO(Node):
         return (
             self.candidates is not None and self.candidates.poses
             and self.scene_points is not None
+            and (self.obstacles is not None or SCENE_SOURCE == 'manual')
             and self.joint_positions is not None
             and self.finger_positions is not None
             and self.tf_buffer.can_transform(

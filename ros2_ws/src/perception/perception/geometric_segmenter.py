@@ -1,17 +1,25 @@
+import os
+
+for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+    os.environ.setdefault(_v, '1')
+
 import numpy as np
-from polars import String
+import cv2
+
+cv2.setNumThreads(1)
+
 from cv_bridge import CvBridge
 from perception_msgs.msg import InstanceMask, InstanceMaskArray
 from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
-from tf2_ros import Buffer, TransformException, TransformListener
+from tf2_ros import Buffer, TransformException, TransformListener, ExtrapolationException
+from rclpy.time import Time
 
 from perception.projection import clean_depth, deproject, depth_to_metres, transform_points
 from perception.ros_utils import ConfiguredNode, lookup_matrix, run_node
 from perception.support_planes import cluster_labels, peel_support_planes
 from perception.self_filter import link_boxes, self_keep_mask
-
 
 class GeometricSegmenter(ConfiguredNode):
     """Depth-only producer: peels support planes, clusters the rest, one instance mask per cluster."""
@@ -66,13 +74,29 @@ class GeometricSegmenter(ConfiguredNode):
         inside = np.all((points >= lo) & (points <= hi), axis=1)
         points, pixels = points[inside], pixels[inside]
 
+        failed = []
+
         def link_to_target(name):
+            target = self.param('target_frame')
             try:
-                return lookup_matrix(self.tf_buffer, self.param('target_frame'), name)
-            except TransformException:
+                return lookup_matrix(self.tf_buffer, target, name, msg.header.stamp)
+            except ExtrapolationException as e:
+                lag = (Time.from_msg(msg.header.stamp).nanoseconds
+                       - self.tf_buffer.get_latest_common_time(target, name).nanoseconds) * 1e-9
+                if lag <= self.param('tf_tolerance_sec'):
+                    return lookup_matrix(self.tf_buffer, target, name)
+                failed.append(f'{name}: lag {lag:.3f}s')
+                return None
+            except TransformException as e:
+                failed.append(f'{name}: {e}')
                 return None
 
         keep = self_keep_mask(points, self.boxes, link_to_target, self.param('self_filter_margin'))
+        if failed:
+            self.get_logger().warn(
+                f'self-filter: {len(failed)} link TF lookups failed (e.g. {failed[0]}); frame dropped',
+                throttle_duration_sec=5.0)
+            return
         points, pixels = points[keep], pixels[keep]
 
         out = InstanceMaskArray()

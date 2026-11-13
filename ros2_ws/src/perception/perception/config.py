@@ -38,7 +38,7 @@ PERCEPTION = {
     'reach_max': [1.3, 1.3, 1.2],
     'edge_tol': 0.01,
     'self_filter_margin': 0.02,
-    # geometric producer
+    'tf_tolerance_sec': 0.05,    # geometric producer
     'rate_hz': 2.0,
     'plane_tol': 0.008,
     'plane_margin': 0.015,
@@ -62,4 +62,7 @@ PERCEPTION = {
     'outlier_k': 10,
     'outlier_std': 2.0,
     'min_object_points': 100,
+    # open-vocabulary producer
+    'ov_model': 'yoloe-11s-seg.pt',
+    'ov_conf': 0.05,
 }

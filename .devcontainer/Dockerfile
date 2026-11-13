@@ -120,7 +120,6 @@ RUN pip3 install --no-cache-dir \
     torch==2.11.0 torchvision==0.26.0
 
 # cuDSS runtime (torch 2.11.0 on Jetson links against this; not bundled in the jp6 wheel)
-RUN pip3 install --no-cache-dir nvidia-cudss-cu12
 
 RUN pip3 install --no-cache-dir "nvidia-cudss-cu12<1"
 
@@ -214,6 +213,13 @@ RUN pip3 install --no-cache-dir ultralytics
 # NEW: apt cv_bridge is built against numpy 1.x; opencv-python >=4.12 forces numpy 2. Pin both.
 # NEW: onnx/onnxslim = TRT export path; lapx = tracker; scikit-learn = DBSCAN/RANSAC cloud cleanup.
 RUN pip3 install --no-cache-dir onnx onnxslim lapx scikit-learn
+# YOLOE text prompts need CLIP. `pip install git+https://github.com/ultralytics/CLIP.git` builds an empty
+# "UNKNOWN" wheel, so keep the clone on PYTHONPATH instead. --no-deps keeps pip away from torch.
+RUN git clone https://github.com/ultralytics/CLIP.git /opt/CLIP && \
+    git -C /opt/CLIP checkout 7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40
+RUN pip3 install --no-cache-dir --no-deps ftfy wcwidth regex
+ENV PYTHONPATH=/opt/CLIP
+RUN python3 -c "import clip"
 RUN python3 -c "import torch; assert torch.__version__.startswith('2.11.0'), torch.__version__"
 # NEW: build guards (an import-only check passed while the conversion was broken)
 RUN python3 -c "import numpy; assert numpy.__version__.startswith('1.'), numpy.__version__"

@@ -1,7 +1,15 @@
+import os
+
+for _v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'):
+    os.environ.setdefault(_v, '1')
+                          
 import time
 from collections import deque
 
 import numpy as np
+import cv2
+cv2.setNumThreads(1)
+
 from cv_bridge import CvBridge
 from perception_msgs.msg import InstanceMaskArray, SceneObject, SceneObjectArray
 from rclpy.qos import qos_profile_sensor_data

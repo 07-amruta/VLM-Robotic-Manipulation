@@ -19,6 +19,7 @@ GRIPPER_JOINTS = [
 OBJECT_ID = 'target_object'
 SUPPORT_ID = 'support_table'
 FLOOR_ID = 'floor'
+OBSTACLE_PREFIX = 'obstacle_'
 MOVEIT_SUCCESS = 1
 
 ROBOT = {
@@ -150,6 +151,8 @@ if os.environ.get('USE_OBJECTS', '0') == '1':  # per-object clouds from `percept
     CAMERA['objects_topic'] = '/scene_objects'
     if os.environ.get('TARGET_CLASS'):
         CAMERA['target_class'] = os.environ['TARGET_CLASS']
+
+TARGET = {'target_class': '', 'target_point': [0.0, 0.0, 0.0], 'target_radius': 0.0}
 
 SAFETY = {
     'dry_run': os.environ.get('DRY_RUN', '0') == '1',  # plan only, no arm motion (gripper still opens)

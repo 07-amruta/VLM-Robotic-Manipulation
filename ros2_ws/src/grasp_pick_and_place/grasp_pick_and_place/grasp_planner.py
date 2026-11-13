@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from grasp_pick_and_place.config import ARM_JOINTS, GRIPPER_JOINTS, OBJECT_ID, SUPPORT_ID
+from grasp_pick_and_place.config import ARM_JOINTS, FLOOR_ID, GRIPPER_JOINTS, OBJECT_ID, SUPPORT_ID
 from grasp_pick_and_place.geometry import longest_run
 
 
@@ -65,11 +65,12 @@ class GraspPlannerMixin:
     def object_contacts(self, joints):
         """Names of the robot bodies touching the object or the table in this arm configuration."""
         response = self.validity_at(joints)
-        touched = (OBJECT_ID, SUPPORT_ID)
+        touched = {OBJECT_ID, SUPPORT_ID, FLOOR_ID, *self.obstacle_ids}
         def tag(c):
-            other = c.contact_body_2 if c.contact_body_1 in touched else c.contact_body_1
             hit = c.contact_body_1 if c.contact_body_1 in touched else c.contact_body_2
-            return f'{other.replace("gripper_", "")}>{"T" if hit == SUPPORT_ID else "O"}'
+            other = c.contact_body_2 if hit == c.contact_body_1 else c.contact_body_1
+            kind = {SUPPORT_ID: 'T', OBJECT_ID: 'O', FLOOR_ID: 'F'}.get(hit, 'N')
+            return f'{other.replace("gripper_", "")}>{kind}'
         return sorted({tag(c) for c in response.contacts
                        if c.contact_body_1 in touched or c.contact_body_2 in touched})
 
