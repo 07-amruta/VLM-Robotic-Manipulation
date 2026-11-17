@@ -141,7 +141,9 @@ class MotionMixin:
         worst = max(max(abs(a - b) for a, b in zip(p.positions, q.positions))
                     for p, q in zip(points[1:], points[:-1]))
         if worst > self.get_parameter('max_joint_step').value:
-            self.get_logger().warn(f'Straight-line path has a joint jump of {worst:.2f} rad')
+            self.get_logger().warn(
+                f'Straight-line path only {fraction:.0%} feasible, error {response.error_code.val}, '
+                f'target z {target[2, 3]:.3f}')
             return None
 
         names = trajectory.joint_trajectory.joint_names

@@ -60,7 +60,7 @@ class SceneObjects(ConfiguredNode):
         t = stamp_ns(array)
         msg = min(self.depth_buffer, key=lambda m: abs(stamp_ns(m) - t))
         depth = clean_depth(depth_to_metres(msg.data, msg.encoding, msg.height, msg.width),
-                            self.param('depth_min'), self.param('depth_max'), self.param('edge_tol'))
+                            self.param('depth_min'), self.param('depth_max'), self.param('mask_edge_tol'))
         points, _ = deproject(depth, np.array(self.info.k).reshape(3, 3))
         instances = [(i.track_id, i.class_name, i.score, self.bridge.imgmsg_to_cv2(i.mask, 'mono8') > 0)
                      for i in array.instances]

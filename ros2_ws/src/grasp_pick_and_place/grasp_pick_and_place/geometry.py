@@ -54,10 +54,23 @@ def top_slice(points, fraction):
     return points[z >= z.max() - fraction * (z.max() - z.min())]
 
 
-def is_dome(points, fraction, ratio):
-    """True when the top slice is much narrower than the whole cloud (a sphere's cap)."""
-    widest = np.ptp(points[:, :2], axis=0).max()
-    return np.ptp(top_slice(points, fraction)[:, :2], axis=0).max() < ratio * widest
+def is_dome(points, fraction, ratio, slices=4):
+    """True when the top slice is much narrower than the body below it (a sphere's cap).
+    Body width = median width of equal-height slices below the top slice, so a handle or
+    other single-slice protrusion does not set it."""
+    z = points[:, 2]
+    cut = z.max() - fraction * (z.max() - z.min())
+    body = points[z < cut]
+    if len(body) == 0:
+        return False
+    edges = np.linspace(body[:, 2].min(), cut, slices + 1)[1:-1]
+    idx = np.digitize(body[:, 2], edges)
+    widths = [np.ptp(body[idx == i][:, :2], axis=0).max()
+              for i in range(slices) if (idx == i).sum() >= 3]
+    if not widths:
+        return False
+    top = np.ptp(top_slice(points, fraction)[:, :2], axis=0).max()
+    return top < ratio * float(np.median(widths))
 
 
 def is_similar(a, b, max_dist=0.01, max_angle=0.1):

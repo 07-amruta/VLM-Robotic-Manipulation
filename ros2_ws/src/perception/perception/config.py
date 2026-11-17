@@ -59,6 +59,7 @@ PERCEPTION = {
     'mask_erode_px': 2,
     # consumer
     'objects_rate_hz': 5.0,
+    'mask_edge_tol' : 0.05,
     'outlier_k': 10,
     'outlier_std': 2.0,
     'min_object_points': 100,
