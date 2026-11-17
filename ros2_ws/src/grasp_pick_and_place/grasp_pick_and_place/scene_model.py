@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 from shape_msgs.msg import SolidPrimitive
 
 from grasp_pick_and_place.config import FLOOR_ID, OBJECT_ID, OBSTACLE_PREFIX, SUPPORT_ID
-from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, top_slice
+from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, support_below, top_slice
 
 
 class SceneMixin:
@@ -23,6 +23,12 @@ class SceneMixin:
         response = self.call_service(self.apply_scene_client, request)
         if response is None or not response.success:
             raise RuntimeError('Planning scene update was rejected')
+
+    def support_for(self, points):
+        """z of the surface under a cloud: highest detected plane below it, else the SCENE value."""
+        z = (support_below(self.support_planes, points, self.get_parameter('support_tol').value)
+             if self.support_planes else None)
+        return self.get_parameter('support_top').value if z is None else float(z)
 
     def discover_gripper_links(self):
         override = [n.strip() for n in self.get_parameter('gripper_links').value.split(',')
@@ -74,10 +80,23 @@ class SceneMixin:
             scene.world.collision_objects.append(remove)
         self.apply_scene(scene)
 
+    def remove_support(self):
+        """Clears a support_table left over from an earlier run."""
+        request = GetPlanningScene.Request()
+        request.components.components = PlanningSceneComponents.WORLD_OBJECT_NAMES
+        current = self.call_service(self.get_scene_client, request).scene
+        if any(o.id == SUPPORT_ID for o in current.world.collision_objects):
+            remove = CollisionObject()
+            remove.id = SUPPORT_ID
+            remove.operation = CollisionObject.REMOVE
+            scene = PlanningScene()
+            scene.is_diff = True
+            scene.world.collision_objects = [remove]
+            self.apply_scene(scene)
+
     def add_obstacles(self):
-        """Fits a box or cylinder to every obstacle cloud, extruded down to the support top."""
+        """Fits a box or cylinder to every obstacle cloud, extruded down to its support surface."""
         margin = self.get_parameter('object_margin').value
-        top = self.get_parameter('support_top').value
         scene = PlanningScene()
         scene.is_diff = True
         self.obstacle_ids = []
@@ -85,7 +104,8 @@ class SceneMixin:
             points = points.astype(float)
             if points.shape[0] < 20:
                 continue
-            centre, size, yaw, _ = fit_box(points, margin, top)
+            support = self.support_for(points)
+            centre, size, yaw, _ = fit_box(points, margin, support)
             round_, _, _ = is_round(points, yaw)
             primitive = SolidPrimitive()
             if round_:
@@ -109,7 +129,7 @@ class SceneMixin:
             self.obstacle_ids.append(obj.id)
             self.get_logger().info(
                 f'{obj.id} {"cylinder" if round_ else "box"} size {np.round(size, 3).tolist()} '
-                f'centre {np.round(centre, 3).tolist()}')
+                f'centre {np.round(centre, 3).tolist()} support {support:.3f}')
         if self.obstacle_ids:
             self.apply_scene(scene)
         self.get_logger().info(f'Obstacles: {len(self.obstacle_ids)}')
@@ -121,8 +141,8 @@ class SceneMixin:
             raise RuntimeError('Too few cloud points to model the object')
         margin = self.get_parameter('object_margin').value
         fraction = self.get_parameter('dome_slice').value
-        centre, size, yaw, fill = fit_box(
-            points, margin, self.get_parameter('support_top').value)
+        self.object_support = self.support_for(points)
+        centre, size, yaw, fill = fit_box(points, margin, self.object_support)
         self.round_object, rect_res, ellipse_res = is_round(points, yaw)
         self.sphere = self.round_object and is_dome(
             points, fraction, self.get_parameter('dome_ratio').value)
@@ -167,13 +187,16 @@ class SceneMixin:
         self.apply_scene(scene)
         shape = 'sphere' if self.sphere else 'cylinder' if self.round_object else 'box'
         self.get_logger().info(
+            f'support {self.object_support:.3f} '
             f'Object {shape} size {np.round(size, 3).tolist()} '
             f'centre {np.round(centre, 3).tolist()} yaw {np.rad2deg(yaw):.0f} deg, '
             f'footprint fill {fill:.2f} rect {rect_res:.3f} ellipse {ellipse_res:.3f}')
 
     def add_support(self):
-        """Adds the table as a block on the floor up to the support_top height."""
-        top = self.get_parameter('support_top').value
+        """Adds the table as a block on the floor up to the object's support height."""
+        top = self.object_support
+        if self.support_planes and top <= min(self.support_planes):
+            return  # object rests on the lowest plane (floor): no table block
         size_x, size_y = self.get_parameter('support_size').value
         centre_x, centre_y = self.get_parameter('support_centre').value
         obj = CollisionObject()

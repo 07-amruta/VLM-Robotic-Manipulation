@@ -20,6 +20,7 @@ from perception.projection import clean_depth, deproject, depth_to_metres, trans
 from perception.ros_utils import ConfiguredNode, lookup_matrix, run_node
 from perception.support_planes import cluster_labels, peel_support_planes
 from perception.self_filter import link_boxes, self_keep_mask
+from perception_msgs.msg import InstanceMask, InstanceMaskArray, SupportPlaneArray
 
 class GeometricSegmenter(ConfiguredNode):
     """Depth-only producer: peels support planes, clusters the rest, one instance mask per cluster."""
@@ -35,6 +36,7 @@ class GeometricSegmenter(ConfiguredNode):
         self.create_subscription(Image, self.param('depth_topic'), self.on_depth, qos_profile_sensor_data)
         self.create_subscription(CameraInfo, self.param('camera_info_topic'), self.on_info, qos_profile_sensor_data)
         self.pub = self.create_publisher(InstanceMaskArray, 'instance_masks/geometric', 10)
+        self.planes_pub = self.create_publisher(SupportPlaneArray, 'support_planes', 10)
         self.create_timer(1.0 / self.param('rate_hz'), self.tick)
         self.boxes = None
         self.create_subscription(
@@ -109,6 +111,13 @@ class GeometricSegmenter(ConfiguredNode):
                 self.param('plane_min_area'), self.param('max_planes'), self.param('max_tilt_deg'))
             self.get_logger().info(
                 f'support planes z={[round(p["z"], 3) for p in planes]}', throttle_duration_sec=5.0)
+
+            planes_msg = SupportPlaneArray()
+            planes_msg.header.stamp = msg.header.stamp
+            planes_msg.header.frame_id = self.param('target_frame')
+            planes_msg.z = sorted(float(p['z']) for p in planes)
+            self.planes_pub.publish(planes_msg)
+            
             rest, rest_pixels = points[remaining], pixels[remaining]
             if len(rest):
                 labels = cluster_labels(rest, self.param('cluster_radius'), self.param('cluster_voxel'))

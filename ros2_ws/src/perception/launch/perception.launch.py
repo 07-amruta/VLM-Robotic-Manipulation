@@ -3,11 +3,6 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
-from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
-
 PRODUCERS = {'geometric': 'geometric_segmenter', 'yolo': 'instance_segmenter', 'target': 'open_vocab_segmenter'}
 THREAD_LIMITS = {v: '1' for v in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS')}
 
@@ -23,16 +18,17 @@ def nodes(context):
              parameters=[{'masks_topic': f'/instance_masks/{mode}'}],
              additional_env=THREAD_LIMITS),
     ]
-    if obstacles and mode != 'geometric':
-        result += [
+    if mode != 'geometric':
+        result.append(
             Node(package='perception', executable='geometric_segmenter', output='screen',
-                 additional_env=THREAD_LIMITS),
+                 additional_env=THREAD_LIMITS))
+    if obstacles and mode != 'geometric':
+        result.append(
             Node(package='perception', executable='scene_objects', name='scene_obstacles',
                  output='screen',
                  parameters=[{'masks_topic': '/instance_masks/geometric'}],
                  remappings=[('scene_objects', 'scene_obstacle_clusters')],
-                 additional_env=THREAD_LIMITS),
-        ]
+                 additional_env=THREAD_LIMITS))
     return result
 
 

@@ -11,9 +11,11 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import Buffer, TransformException, TransformListener
 
-from grasp_pick_and_place.config import PROPOSER
-from grasp_pick_and_place.transform_utils import lookup_matrix, matrix_to_pose
 
+from grasp_pick_and_place.transform_utils import lookup_matrix, matrix_to_pose
+from perception_msgs.msg import SupportPlaneArray
+from grasp_pick_and_place.config import PROPOSER, SHAPE
+from grasp_pick_and_place.geometry import support_below
 
 def load_graspnet(root, checkpoint_path, device):
     # GraspNet-baseline is not pip-installable; its modules import each other by bare name.
@@ -78,7 +80,10 @@ class GraspProposer(Node):
         # 0.0 keeps horizontal and downward approaches; the executor ranks them by reachability
         # and by how close the hand can close to the object's centre.
         self.declare_parameter('max_approach_z', PROPOSER['max_approach_z'])
-        # Drop grasps centred lower than this above the object's lowest point (the table).
+        # Drop grasps centred lower than above the support surface, else the object’s lowest point.
+        self.declare_parameter('support_tol', SHAPE['support_tol'])
+        self.cloud_msg = None
+        self.planes_msg = None
         self.declare_parameter('min_grasp_height', 0.02)
         self.declare_parameter('num_candidates', 30)
         self.declare_parameter('nms_translation', 0.03)
@@ -100,11 +105,29 @@ class GraspProposer(Node):
             reliability=ReliabilityPolicy.RELIABLE,
         )
         self.create_subscription(PointCloud2, 'scene_points', self.on_cloud, latched)
+        self.create_subscription(SupportPlaneArray, 'scene_support_planes', self.on_planes, latched)        
         self.pose_pub = self.create_publisher(PoseStamped, 'grasp_pose', latched)
         self.candidates_pub = self.create_publisher(PoseArray, 'grasp_candidates', latched)
 
+    def on_planes(self, msg):
+        self.planes_msg = msg
+        self.process()
+
     def on_cloud(self, msg):
-        # Cloud format produced by scene_snapshot: xyz float32
+        self.cloud_msg = msg
+        self.process()
+
+    def process(self):
+        cloud, planes = self.cloud_msg, self.planes_msg
+        if cloud is None or planes is None:
+            return
+        if (cloud.header.stamp.sec, cloud.header.stamp.nanosec) != (
+                planes.header.stamp.sec, planes.header.stamp.nanosec):
+            return  # planes of another capture; wait for the matching one
+        self.cloud_msg = None
+        self.run(cloud, list(planes.z))
+
+    def run(self, msg, planes):       # Cloud format produced by scene_snapshot: xyz float32
         points = np.frombuffer(msg.data, dtype=np.float32).reshape(-1, 3)
         if points.shape[0] == 0:
             self.get_logger().warn('Empty cloud, skipping')
@@ -142,8 +165,12 @@ class GraspProposer(Node):
         positions = grasps.translations @ rot.T + base_from_optical[:3, 3]
 
         steep = rotations[:, 2, 0] <= self.get_parameter('max_approach_z').value
-        high = positions[:, 2] >= points[:, 2].min() + self.get_parameter('min_grasp_height').value
+        floor = (support_below(planes, points, self.get_parameter('support_tol').value)
+                 if planes else None)
+        base = points[:, 2].min() if floor is None else floor
+        high = positions[:, 2] >= base + self.get_parameter('min_grasp_height').value
         self.get_logger().info(
+            f'base {base:.3f}, '
             f'grasps {len(positions)}: steep {steep.sum()}, high {high.sum()}, both {(steep & high).sum()}, '
             f'min approach_z {rotations[:, 2, 0].min():.2f}, z range '
             f'{positions[:, 2].min():.3f}..{positions[:, 2].max():.3f}, cloud z min {points[:, 2].min():.3f}')

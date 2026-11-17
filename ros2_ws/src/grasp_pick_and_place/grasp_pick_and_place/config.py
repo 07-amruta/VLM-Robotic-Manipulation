@@ -118,6 +118,7 @@ SHAPE = {
     'prismatic_fill': 0.9,
     'dome_slice': 0.15,             # top fraction of the cloud's height
     'dome_ratio': 0.8,
+    'support_tol': 0.02,            # m, plane may sit this far above the cloud's lowest point
 }
 
 SEARCH = {

@@ -7,6 +7,8 @@ import rclpy
 from geometry_msgs.msg import PoseStamped
 from std_srvs.srv import Trigger
 from tf2_ros import TransformException
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import String
 
 import numpy as np
 
@@ -22,6 +24,8 @@ POSE_TOPIC = '/grasp_pose'
 READY_TIMEOUT = 120.0
 POSE_TIMEOUT = 20.0  # per capture attempt
 CAPTURE_ATTEMPTS = 3
+CAPTURE_WAIT = 30.0          # s, retry a failed capture (perception warm-up) before giving up
+CAPTURE_RETRY_PERIOD = 1.0   # s
 
 
 def background_nodes():
@@ -30,7 +34,8 @@ def background_nodes():
         return {'manual_scene': {**MANUAL_SCENE, 'support_top': SCENE['support_top']}}
     target = {k: v for k, v in TARGET.items() if v != ''}
     return {'scene_snapshot': {**CAMERA, 'objects_topic': '/scene_objects',
-                               'obstacles_topic': '/scene_obstacle_clusters', **target},
+                               'obstacles_topic': '/scene_obstacle_clusters',
+                               'planes_topic': '/support_planes', **target},
             'grasp_proposer': {'optical_frame': CAMERA['optical_frame']}}
 
 
@@ -66,6 +71,17 @@ def spin_until(node, condition, timeout):
 
 
 # ---------- sequence steps ----------
+def trigger_capture(robot, client):
+    """Calls the capture service until it succeeds or CAPTURE_WAIT elapses."""
+    deadline = time.monotonic() + CAPTURE_WAIT
+    while True:
+        future = client.call_async(Trigger.Request())
+        rclpy.spin_until_future_complete(robot, future)
+        result = future.result()
+        robot.get_logger().info(f'capture: {result.message}')
+        if result.success or time.monotonic() >= deadline:
+            return result.success
+        spin_until(robot, lambda: False, CAPTURE_RETRY_PERIOD)
 
 def capture_scene(robot):
     """Triggers the scene source until a grasp pose is published."""
@@ -77,14 +93,19 @@ def capture_scene(robot):
 
     received = []
     robot.create_subscription(PoseStamped, POSE_TOPIC, received.append, 10)
+    target = os.environ.get('TARGET_CLASS', '').strip()
+    if target:  # unset = request sent by hand / another node
+        request_pub = robot.create_publisher(
+            String, '/target_request',
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
+                       reliability=ReliabilityPolicy.RELIABLE))
+        request_pub.publish(String(data=target))
     spin_until(robot, lambda: False, 2.0)  # let the subscription connect
 
     for attempt in range(1, CAPTURE_ATTEMPTS + 1):
         robot.get_logger().info(f'Capturing scene (attempt {attempt}/{CAPTURE_ATTEMPTS})')
-        future = client.call_async(Trigger.Request())
-        rclpy.spin_until_future_complete(robot, future)
-        robot.get_logger().info(f'capture: {future.result().message}')
-        if spin_until(robot, lambda: bool(received), POSE_TIMEOUT):
+        if trigger_capture(robot, client) and spin_until(
+                robot, lambda: bool(received), POSE_TIMEOUT):
             break
     else:
         raise RuntimeError('No grasp pose received')
@@ -119,6 +140,7 @@ def prepare(robot):
     robot.gripper_links = robot.discover_gripper_links()
     robot.remove_object()
     robot.remove_obstacles()
+    robot.remove_support()
     robot.add_object()
     robot.add_obstacles()
     robot.add_support()

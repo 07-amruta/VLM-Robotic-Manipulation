@@ -13,7 +13,7 @@ from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from std_srvs.srv import Trigger
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformException, TransformListener
-from perception_msgs.msg import SceneObjectArray
+from perception_msgs.msg import SceneObjectArray, SupportPlaneArray
 from perception.projection import deproject, depth_to_metres, transform_points
 from perception.mask_to_cloud import to_pointcloud2
 from scipy.spatial import cKDTree
@@ -83,10 +83,13 @@ class SceneSnapshot(Node):
         self.declare_parameter('objects_max_age', 1.0)  # s; stale arrays are rejected
         self.declare_parameter('obstacles_topic', '')  # '' = obstacles off
         self.declare_parameter('obstacle_dedup_margin', 0.02)  # m
+        self.declare_parameter('planes_topic', '')  # '' = planes off
         self.obstacles_msg = None
         self.obstacles_time = None
         self.objects_msg = None
         self.objects_time = None
+        self.planes_msg = None
+        self.planes_time = None
 
         self.request = ''
         self.create_subscription(
@@ -112,6 +115,9 @@ class SceneSnapshot(Node):
         if self.get_parameter('obstacles_topic').value:
             self.create_subscription(
                 SceneObjectArray, self.get_parameter('obstacles_topic').value, self.on_obstacles, 1)
+        if self.get_parameter('planes_topic').value:
+            self.create_subscription(
+                SupportPlaneArray, self.get_parameter('planes_topic').value, self.on_planes, 1)
 
         latched = QoSProfile(
             depth=1,
@@ -120,6 +126,7 @@ class SceneSnapshot(Node):
         )
         self.points_pub = self.create_publisher(PointCloud2, 'scene_points', latched)
         self.obstacles_pub = self.create_publisher(SceneObjectArray, 'scene_obstacles', latched)
+        self.planes_pub = self.create_publisher(SupportPlaneArray, 'scene_support_planes', latched)
         self.create_service(Trigger, 'capture_scene', self.on_capture)
 
     def on_depth(self, msg):
@@ -135,6 +142,22 @@ class SceneSnapshot(Node):
     def on_obstacles(self, msg):
         self.obstacles_msg = msg
         self.obstacles_time = self.get_clock().now()
+
+    def on_planes(self, msg):
+        self.planes_msg = msg
+        self.planes_time = self.get_clock().now()
+
+    def publish_planes(self, frame_id, stamp):
+        """Latches the latest support plane heights; empty if missing or stale (consumer falls back to SCENE)."""
+        out = SupportPlaneArray()
+        out.header.frame_id = frame_id
+        if self.planes_msg is not None:
+            age = (self.get_clock().now() - self.planes_time).nanoseconds / 1e9
+            if age <= self.get_parameter('objects_max_age').value:
+                out.z = self.planes_msg.z
+        out.header.stamp = stamp
+        self.planes_pub.publish(out)
+        self.get_logger().info(f'planes: {list(out.z)}')
 
     def on_request(self, msg):
         self.request = msg.data.strip()
@@ -171,6 +194,7 @@ class SceneSnapshot(Node):
         else:
             chosen = max(candidates, key=lambda o: o.cloud.width)
         self.publish_obstacles(chosen)
+        self.publish_planes(chosen.cloud.header.frame_id, chosen.cloud.header.stamp)
         self.points_pub.publish(chosen.cloud)
         response.success = True
         response.message = f'{chosen.class_name} #{chosen.track_id}: {chosen.cloud.width} points'

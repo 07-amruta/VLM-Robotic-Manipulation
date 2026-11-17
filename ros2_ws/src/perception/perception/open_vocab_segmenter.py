@@ -39,6 +39,8 @@ class OpenVocabSegmenter(ConfiguredNode):
         self.get_logger().info(f'target request: {noun!r}')
 
     def on_image(self, msg):
+        self.get_logger().info(
+            f'image cb: noun={self.noun!r} info={self.info is not None}', throttle_duration_sec=2.0)
         if self.noun is None or self.info is None:
             return
         frame = self.bridge.imgmsg_to_cv2(msg, 'bgr8')

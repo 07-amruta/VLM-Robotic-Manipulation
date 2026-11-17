@@ -28,6 +28,12 @@ def fit_box(points, margin, base=None):
     size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
     return centre, size, yaw, fill
 
+def support_below(planes, points, tol):
+    """Highest plane z at or below the cloud's lowest point + tol; None if none qualifies."""
+    limit = points[:, 2].min() + tol
+    below = [z for z in planes if z <= limit]
+    return max(below) if below else None
+
 def is_round(points, yaw):
     """True when the hull follows the ellipse inscribed in the oriented box better than the box outline."""
     xy = points[:, :2]
