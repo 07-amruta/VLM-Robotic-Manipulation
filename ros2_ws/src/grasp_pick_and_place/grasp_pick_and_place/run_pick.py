@@ -184,6 +184,9 @@ def confirm_stage(label):
             f'{label}: y to run, anything else aborts ').strip().lower() != 'y':
         raise RuntimeError(f'{label} declined')
 
+def log_fingers(robot, label):
+    robot.spin_for(0.3)
+    robot.get_logger().info(f'TEMP fingers {label} {np.round(robot.finger_positions, 3).tolist()}')
 
 def execute_pick(robot, plan):
     goals = plan['goals']
@@ -202,10 +205,12 @@ def execute_pick(robot, plan):
     robot.get_logger().info('Close gripper')
     if not robot.close_gripper():
         raise RuntimeError('Close gripper failed')
+    log_fingers(robot, 'after close')
 
     confirm_stage('Lift')
     robot.get_logger().info('Lift')
     robot.line_move(goals['lift'], 'Lift')
+    log_fingers(robot, 'after lift') 
 
     confirm_stage('Up')
     robot.get_logger().info('Up')
@@ -214,6 +219,7 @@ def execute_pick(robot, plan):
         list(robot.joint_positions), robot.get_parameter('up_joints').value)
     if up is None or not robot.execute_trajectory(up):
         raise RuntimeError('Up move failed')
+    log_fingers(robot, 'after up')
 
 
 def approve(robot, grasp):
@@ -236,6 +242,8 @@ def pick(robot, placed, proposal_count):
         robot.get_logger().info(
             f'Proposal {label}: closing centre {offset:.2f} of the half-diagonal from the '
             f'centroid, {width:.3f} m free across, backed off {retreat:.3f} m')
+        c = grasp[:3, 3] + grasp[:3, :3] @ robot.hand_centre
+        robot.get_logger().info(f'TEMP closing centre {np.round(c, 3).tolist()} obj centre {np.round(robot.object_centre, 3).tolist()} size {np.round(robot.object_size, 3).tolist()} approach {np.round(grasp[:3, 0], 2).tolist()}')
         plan = robot.plan_pick(grasp)
         if plan is None:
             continue

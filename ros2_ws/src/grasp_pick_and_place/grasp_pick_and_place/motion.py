@@ -131,7 +131,7 @@ class MotionMixin:
         fraction = response.fraction
         if (response.error_code.val != MOVEIT_SUCCESS
                 or fraction < self.get_parameter('min_path_fraction').value):
-            self.get_logger().warn(f'Straight-line path only {fraction:.0%} feasible')
+            self.get_logger().warn(f'Straight-line path only {fraction:.0%} feasible, error {response.error_code.val}, target z {target[2, 3]:.3f}')
             return None
 
         trajectory = response.solution

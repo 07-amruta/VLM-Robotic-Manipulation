@@ -144,6 +144,9 @@ class SceneMixin:
         self.object_support = self.support_for(points)
         centre, size, yaw, fill = fit_box(points, margin, self.object_support)
         self.round_object, rect_res, ellipse_res = is_round(points, yaw)
+        z = points[:, 2]; idx = np.digitize(z, np.linspace(z.min(), z.max(), 7)[1:-1])
+        w = [round(float(np.ptp(points[idx == i][:, :2], axis=0).max()), 3) for i in range(6) if (idx == i).sum() >= 3]
+        self.get_logger().info(f'TEMP slice widths {w} extent {np.round(np.ptp(points, axis=0), 3).tolist()} n {len(points)}')
         self.sphere = self.round_object and is_dome(
             points, fraction, self.get_parameter('dome_ratio').value)
         if self.sphere:
