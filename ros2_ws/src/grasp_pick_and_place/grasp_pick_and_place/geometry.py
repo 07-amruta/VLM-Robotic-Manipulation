@@ -28,6 +28,18 @@ def fit_box(points, margin, base=None):
     size = np.array([*(high - low + 2.0 * margin), z_high - z_low + margin])
     return centre, size, yaw, fill
 
+def body_footprint(points, yaw, fraction):
+    """Body xy footprint from the top slice, the only slice a single camera sees in full
+    (side slices show only the near face). Returns (centre_xy, size_xy) or None."""
+    c, s = np.cos(yaw), np.sin(yaw)
+    rot = np.array([[c, -s], [s, c]])
+    top = top_slice(points, fraction)
+    if len(top) < 3:
+        return None
+    local = top[:, :2] @ rot
+    low, high = local.min(axis=0), local.max(axis=0)
+    return rot @ ((low + high) / 2.0), high - low
+
 def support_below(planes, points, tol):
     """Highest plane z at or below the cloud's lowest point + tol; None if none qualifies."""
     limit = points[:, 2].min() + tol

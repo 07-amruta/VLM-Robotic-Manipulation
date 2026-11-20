@@ -11,8 +11,8 @@ from scipy.spatial.transform import Rotation
 from shape_msgs.msg import SolidPrimitive
 
 from grasp_pick_and_place.config import FLOOR_ID, OBJECT_ID, OBSTACLE_PREFIX, SUPPORT_ID
-from grasp_pick_and_place.geometry import fit_box, is_dome, is_round, support_below, top_slice
-
+from grasp_pick_and_place.geometry import (
+    body_footprint, fit_box, is_dome, is_round, support_below, top_slice)
 
 class SceneMixin:
     """Object and table models in MoveIt's planning scene, gripper-object collision matrix."""
@@ -158,7 +158,17 @@ class SceneMixin:
             centre = np.array([*(cap.min(axis=0) + cap.max(axis=0)) / 2.0,
                                points[:, 2].max() - radius + margin])
             size = np.full(3, 2.0 * radius)
+
         self.object_centre, self.object_size = centre, size
+        self.grasp_centre, self.grasp_size = centre.copy(), size.copy()
+        body = None if self.sphere else body_footprint(points, yaw, fraction)
+        if body is not None:
+            self.grasp_centre[:2] = body[0]
+            self.grasp_size[:2] = body[1] + 2.0 * margin
+        self.get_logger().info(
+            f'TEMP body centre {np.round(self.grasp_centre, 3).tolist()} '
+            f'size {np.round(self.grasp_size, 3).tolist()}')
+        
         ex = np.array([np.cos(yaw), np.sin(yaw), 0.0])
         ey = np.array([-np.sin(yaw), np.cos(yaw), 0.0])
         self.box_axes = (ex, -ex, ey, -ey)

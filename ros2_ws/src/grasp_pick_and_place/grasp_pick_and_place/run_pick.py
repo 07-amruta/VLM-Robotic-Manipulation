@@ -13,7 +13,7 @@ from std_msgs.msg import String
 import numpy as np
 
 from grasp_pick_and_place.config import (
-    CAMERA, HARDWARE_MODE, MANUAL_SCENE, SAFETY, SCENE, SCENE_SOURCE, TARGET)
+    CAMERA, HARDWARE_MODE, MANUAL_SCENE, SAFETY, SCENE, SCENE_SOURCE, TARGET, ARM_JOINTS)
 from grasp_pick_and_place.geometry import is_similar
 from grasp_pick_and_place.pick_executor import PickExecutor
 from grasp_pick_and_place.transform_utils import lookup_matrix, pose_to_matrix
@@ -198,6 +198,11 @@ def execute_pick(robot, plan):
         raise RuntimeError('Pre-grasp failed')
     confirm_stage('Approach')
     robot.get_logger().info('Approach')
+    robot.spin_for(0.3)
+    traj = plan['pre_trajectory'].joint_trajectory
+    planned = dict(zip(traj.joint_names, traj.points[-1].positions))
+    deviation = max(abs(planned[n] - q) for n, q in zip(ARM_JOINTS, robot.joint_positions))
+    robot.get_logger().info(f'TEMP pre-grasp deviation {deviation:.4f} rad')
     robot.line_move(goals['grasp'], 'Approach')
 
     robot.set_contact_allowed(True)
@@ -244,6 +249,10 @@ def pick(robot, placed, proposal_count):
             f'centroid, {width:.3f} m free across, backed off {retreat:.3f} m')
         c = grasp[:3, 3] + grasp[:3, :3] @ robot.hand_centre
         robot.get_logger().info(f'TEMP closing centre {np.round(c, 3).tolist()} obj centre {np.round(robot.object_centre, 3).tolist()} size {np.round(robot.object_size, 3).tolist()} approach {np.round(grasp[:3, 0], 2).tolist()}')
+        ax = grasp[:3, :3] @ robot.hand_axis
+        lat = np.cross(grasp[:3, 0], ax)
+        d = c - robot.grasp_centre
+        robot.get_logger().info(f'TEMP offset along closing {d @ ax:.3f} lateral {d @ lat:.3f}')
         plan = robot.plan_pick(grasp)
         if plan is None:
             continue

@@ -53,10 +53,11 @@ class GripperMixin:
                 if stalled[i]:
                     continue
                 measured = self.finger_positions[i]
-                still[i] = still[i] + 1 if abs(measured - previous[i]) < eps else 0
-                previous[i] = measured
+                was_moved = moved[i]
                 # Latched: a finger pushed back to its open stop has still moved earlier
                 moved[i] = moved[i] or measured - start[i] > step
+                still[i] = still[i] + 1 if was_moved and abs(measured - previous[i]) < eps else 0
+                previous[i] = measured
                 blocked = moved[i] and still[i] >= needed and target[i] - measured > lag
                 if blocked:
                     self.get_logger().info(

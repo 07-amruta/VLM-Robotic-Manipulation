@@ -132,6 +132,9 @@ class MotionMixin:
         if (response.error_code.val != MOVEIT_SUCCESS
                 or fraction < self.get_parameter('min_path_fraction').value):
             self.get_logger().warn(f'Straight-line path only {fraction:.0%} feasible, error {response.error_code.val}, target z {target[2, 3]:.3f}')
+            check = self.validity_at(start_joints)
+            pairs = [(c.contact_body_1, c.contact_body_2) for c in check.contacts]
+            self.get_logger().info(f'TEMP start valid {check.valid}, contacts {pairs}')
             return None
 
         trajectory = response.solution

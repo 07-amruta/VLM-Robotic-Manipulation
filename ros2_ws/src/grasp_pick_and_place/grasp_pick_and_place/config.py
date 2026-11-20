@@ -56,6 +56,7 @@ GRIPPER = {
     'contact_lag': 0.08,
     'squeeze_margin': 0.01,
     'squeeze_margin_sphere': 0.03,
+    'contact_tolerance': 0.005,  # m, closed-hand contact depth ignored as model noise
     'close_timeout': 15.0,
     'motion_eps': 0.01,
     'stall_count': 2,

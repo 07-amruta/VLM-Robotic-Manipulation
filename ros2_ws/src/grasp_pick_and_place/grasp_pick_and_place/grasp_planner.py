@@ -48,18 +48,18 @@ class GraspPlannerMixin:
             r = Rotation.from_rotvec(approach * (snap + extra)).as_matrix() @ rot
             pose = np.eye(4)
             pose[:3, :3] = r
-            pose[:3, 3] = self.object_centre - r @ self.hand_centre
+            pose[:3, 3] = self.grasp_centre - r @ self.hand_centre
             poses.append(pose)
         return poses
 
     def top_down_grasp(self):
         """Fallback proposal: straight down onto the object, closing across its narrower side."""
         ex, _, ey, _ = self.box_axes
-        closing = ex if self.object_size[0] <= self.object_size[1] else ey
+        closing = ex if self.grasp_size[0] <= self.grasp_size[1] else ey
         approach = np.array([0.0, 0.0, -1.0])
         grasp = np.eye(4)
         grasp[:3, :3] = np.column_stack([approach, closing, np.cross(approach, closing)])
-        grasp[:3, 3] = self.object_centre
+        grasp[:3, 3] = self.grasp_centre
         return grasp
 
     def object_contacts(self, joints):
@@ -103,10 +103,16 @@ class GraspPlannerMixin:
         last = min(reach + margin, limit)
         for q in [c for c in closures if c <= last] + [last]:
             response = self.validity_at(joints, [q] * len(GRIPPER_JOINTS))
-            if not response.valid:
+            tolerance = self.get_parameter('contact_tolerance').value
+            ground = {SUPPORT_ID, FLOOR_ID}
+            deep = [c for c in response.contacts
+                    if c.depth > (tolerance if {c.contact_body_1, c.contact_body_2} & ground
+                                  else 0.0)]
+            if not response.valid and (deep or not response.contacts):
                 self.get_logger().info(
                     f'closed-hand hit at q={q:.2f}: '
-                    f'{sorted({(c.contact_body_1, c.contact_body_2) for c in response.contacts})}')
+                    f'{sorted({(c.contact_body_1, c.contact_body_2) for c in response.contacts})} '
+                    f'depth {max((c.depth for c in response.contacts), default=0.0):.4f}')
                 return False
         return True
 
@@ -216,8 +222,8 @@ class GraspPlannerMixin:
             return self.reject('no contact-free hand position around the object')
         pose, width, retreat = found
         centre = pose[:3, 3] + pose[:3, :3] @ self.hand_centre
-        offset = float(np.linalg.norm(centre - self.object_centre)
-                       / (0.5 * np.linalg.norm(self.object_size)))
+        offset = float(np.linalg.norm(centre - self.grasp_centre)
+                       / (0.5 * np.linalg.norm(self.grasp_size)))
         return pose, width, retreat, offset
 
     def plan_pick(self, grasp):
